@@ -1,11 +1,10 @@
 
 import unittest
-from typing import Union
 
 import torch
 
-from ldm.modules.textual_inversion_manager import TextualInversionManager
-from tests.prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, UNKNOWN_WORDS, \
+from incite import TextualInversionManager
+from test.prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, UNKNOWN_WORDS, \
     KNOWN_WORDS_TOKEN_IDS
 
 

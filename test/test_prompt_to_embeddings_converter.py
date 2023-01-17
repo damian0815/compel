@@ -2,10 +2,10 @@ import unittest
 
 import torch
 
-from ldm.invoke.conditioning import ConditioningSchedulerFactory, StaticConditioningScheduler
-from ldm.modules.prompt_to_embeddings_converter import PromptToEmbeddingsConverter
-from ldm.modules.textual_inversion_manager import TextualInversionManager
-from tests.prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
+from incite.conditioning_scheduler import ConditioningSchedulerFactory, StaticConditioningScheduler
+from incite.prompt_to_embeddings_converter import PromptToEmbeddingsConverter
+from incite.textual_inversion_manager import TextualInversionManager
+from test.prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
 
 def make_dummy_conditioning_scheduler_factor():
