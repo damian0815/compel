@@ -55,7 +55,7 @@ class DummyTokenizer():
     def __init__(self, model_max_length=77):
         self.tokens = KNOWN_WORDS.copy() + ["<|bos|>", "<|eos|>"]
         self.bos_token_id = len(self.tokens)-2
-        self.eos_token_id = len(self.tokens)-2
+        self.eos_token_id = len(self.tokens)-1
         self.pad_token_id = self.eos_token_id
         self.unk_token_id = self.eos_token_id
         self.model_max_length = model_max_length

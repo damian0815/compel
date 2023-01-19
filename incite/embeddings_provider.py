@@ -160,9 +160,8 @@ class EmbeddingsProvider:
 
         return result
 
-    def get_token_ids_and_expand_weights(self, fragments: list[str], weights: list[float], device: str) \
-            -> (torch.Tensor, torch.Tensor):
-        """
+    def get_token_ids_and_expand_weights(self, fragments: list[str], weights: list[float], device: str) -> (torch.Tensor, torch.Tensor):
+        '''
         Given a list of text fragments and corresponding weights: tokenize each fragment, append the token sequences
         together and return a padded token sequence starting with the bos marker, ending with the eos marker, and padded
         or truncated as appropriate to `self.max_length`. Also return a list of weights expanded from the passed-in
@@ -170,12 +169,11 @@ class EmbeddingsProvider:
 
         :param fragments: Text fragments to tokenize and concatenate. May be empty.
         :param weights: Per-fragment weights (i.e. quasi-CFG scaling). Values from 0 to inf are permitted. In practise with SD1.5
-                        values >1.6 tend to produce garbage output. Must have same length as `fragments`.
+                        values >1.6 tend to produce garbage output. Must have same length as `fragment`.
         :return: A tuple of tensors `(token_ids, weights)`. `token_ids` is ints, `weights` is floats, both have shape `[self.max_length]`.
-        """
+        '''
         if len(fragments) != len(weights):
-            raise ValueError(
-                f"lengths of text and fragment_weights lists are not the same ({len(fragments)} != {len(weights)})")
+            raise ValueError(f"lengths of text and fragment_weights lists are not the same ({len(fragments)} != {len(weights)})")
 
         # empty is meaningful
         if len(fragments) == 0:
@@ -184,7 +182,7 @@ class EmbeddingsProvider:
         per_fragment_token_ids = self.get_token_ids(fragments, include_start_and_end_markers=False)
         all_token_ids = []
         per_token_weights = []
-        # print("all fragments:", fragments, weights)
+        #print("all fragments:", fragments, weights)
         for this_fragment_token_ids, weight in zip(per_fragment_token_ids, weights):
             # append
             all_token_ids += this_fragment_token_ids
@@ -192,14 +190,15 @@ class EmbeddingsProvider:
             per_token_weights += [float(weight)] * len(this_fragment_token_ids)
 
         # leave room for bos/eos
-        if len(all_token_ids) > self.max_token_count - 2:
-            excess_token_count = len(all_token_ids) - self.max_token_count - 2
+        max_token_count_without_bos_eos_markers = self.max_token_count - 2
+        if len(all_token_ids) > max_token_count_without_bos_eos_markers:
+            excess_token_count = len(all_token_ids) - max_token_count_without_bos_eos_markers
             # TODO build nice description string of how the truncation was applied
             # this should be done by calling self.tokenizer.convert_ids_to_tokens() then passing the result to
             # self.tokenizer.convert_tokens_to_string() for the token_ids on each side of the truncation limit.
             print(f">> Prompt is {excess_token_count} token(s) too long and has been truncated")
-            all_token_ids = all_token_ids[0:self.max_token_count]
-            per_token_weights = per_token_weights[0:self.max_token_count]
+            all_token_ids = all_token_ids[0:max_token_count_without_bos_eos_markers]
+            per_token_weights = per_token_weights[0:max_token_count_without_bos_eos_markers]
 
         # pad out to a self.max_length-entry array: [eos_token, <prompt tokens>, eos_token, ..., eos_token]
         # (typically self.max_length == 77)
@@ -211,8 +210,9 @@ class EmbeddingsProvider:
 
         all_token_ids_tensor = torch.tensor(all_token_ids, dtype=torch.long, device=device)
         per_token_weights_tensor = torch.tensor(per_token_weights, dtype=torch.float32, device=device)
-        # print(f"assembled all_token_ids_tensor with shape {all_token_ids_tensor.shape}")
+        #print(f"assembled all_token_ids_tensor with shape {all_token_ids_tensor.shape}")
         return all_token_ids_tensor, per_token_weights_tensor
+
 
     def build_weighted_embedding_tensor(self, token_ids: torch.Tensor, per_token_weights: torch.Tensor) -> torch.Tensor:
         """
