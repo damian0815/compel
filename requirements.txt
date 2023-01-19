@@ -1,2 +1,4 @@
 pyparsing
 torch
+transformers
+diffusers

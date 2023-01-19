@@ -17,9 +17,10 @@ class DummyEmbeddingsList(list):
 
 def make_dummy_embedding():
     return torch.randn([768])
+class Object(object):
+    pass
 
 class DummyTransformer:
-
 
     def __init__(self):
         self.embeddings = DummyEmbeddingsList([make_dummy_embedding() for _ in range(len(KNOWN_WORDS)+2)])
@@ -36,28 +37,42 @@ class DummyTransformer:
     def get_input_embeddings(self):
         return self.embeddings
 
-    def forward(self, input_ids: torch.Tensor, return_dict: bool=False) -> torch.Tensor:
-        if return_dict:
-            raise AssertionError("for unit testing, return_dict must be false")
+    def forward(self, input_ids: torch.Tensor, return_dict: bool=True) -> torch.Tensor:
         if input_ids.shape[0] > 1:
             raise AssertionError("for unit testing, only batch size =1 is supported")
-        return torch.index_select(torch.cat(self.embeddings), dim=0, index=input_ids.squeeze(0)).unsqueeze(0)
+        all_embeddings = torch.cat([e.unsqueeze(0) for e in self.embeddings])
+        embeddings = torch.index_select(all_embeddings, dim=0, index=input_ids.squeeze(0)).unsqueeze(0)
+        if not return_dict:
+            return [embeddings, torch.empty_like(embeddings)]
+        o = Object()
+        o.last_hidden_state = embeddings
+        return o
 
     def __call__(self, input_ids, **kwargs):
         return self.forward(input_ids=input_ids)
 
 class DummyTokenizer():
-    def __init__(self):
+    def __init__(self, model_max_length=77):
         self.tokens = KNOWN_WORDS.copy() + ["<|bos|>", "<|eos|>"]
         self.bos_token_id = len(self.tokens)-2
         self.eos_token_id = len(self.tokens)-2
         self.pad_token_id = self.eos_token_id
         self.unk_token_id = self.eos_token_id
-        self.model_max_length = 77
+        self.model_max_length = model_max_length
 
     def __call__(self, fragments, **kwargs):
-        return {'input_ids': [[self.tokens.index(w) for w in fragment.split(" ")]
-                                           for fragment in fragments]}
+        tokenized = [[self.bos_token_id] + [self.tokens.index(w) for w in fragment.split(" ")] + [self.eos_token_id]
+                     if len(fragment)>0 else [self.bos_token_id] + [self.eos_token_id]
+                                           for fragment in fragments]
+        if kwargs.get('truncation', False):
+            max_length = kwargs.get('max_length', self.model_max_length)
+            tokenized = [x[0:self.model_max_length-1] + [self.eos_token_id] if len(x)>max_length
+                         else x
+                         for x in tokenized]
+        padding_strategy = kwargs.get('padding', 'do_not_pad')
+        if padding_strategy != 'do_not_pad':
+            raise Exception(f"for unit tests only 'do_not_pad' is supported as a padding strategy (got '{padding_strategy}')")
+        return {'input_ids': tokenized}
 
     def convert_tokens_to_ids(self, token_str):
         try:

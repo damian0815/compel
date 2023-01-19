@@ -2,6 +2,7 @@ import unittest
 
 import torch
 
+from incite.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
 from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
 from incite.incite import Incite
@@ -13,61 +14,96 @@ def make_dummy_incite():
     return Incite(tokenizer=tokenizer, text_encoder=text_encoder)
 
 
+def make_test_conditioning(text_encoder: DummyTransformer, tokenizer: DummyTokenizer, token_ids: list[int]) -> torch.Tensor:
+    pre_padding = [tokenizer.bos_token_id]
+    token_ids = token_ids[0:tokenizer.model_max_length-2]
+    post_padding = [tokenizer.eos_token_id] * (tokenizer.model_max_length - len(token_ids) - 1)
+    token_ids = pre_padding + token_ids + post_padding
+    assert len(token_ids) == tokenizer.model_max_length
+    conditioning =  text_encoder(input_ids=torch.tensor(token_ids, dtype=torch.int).unsqueeze(0)).last_hidden_state
+    return conditioning
+
+
 class TestPromptToEmbeddings(unittest.TestCase):
 
-    def test_basic_prompt_to_conditioning(self):
-        incite = make_dummy_incite()
+    def test_basic_prompt(self):
+        tokenizer = DummyTokenizer()
+        text_encoder = DummyTransformer()
+        incite = Incite(tokenizer=tokenizer, text_encoder=text_encoder)
 
         # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
-        prompt_string = " ".join(KNOWN_WORDS[:3])
-        cfg_scale = 7.5
-        conditioning_scheduler = incite.make_conditioning_scheduler(prompt_string, cfg_scale=cfg_scale)
-        expected_positive_conditioning = incite.text_encoder(torch.Tensor([]))
-        expected_negative_conditioning = incite.text_encoder(torch.Tensor(KNOWN_WORDS_TOKEN_IDS[:3]))
+        prompt = " ".join(KNOWN_WORDS[:3])
+        conditioning_scheduler = incite.make_conditioning_scheduler(prompt)
+        conditioning_scheduler_2 = incite.make_conditioning_scheduler(prompt)
+        expected_positive_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3])
+        expected_negative_conditioning = make_test_conditioning(text_encoder, tokenizer, [])
         self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
                                                          expected_positive_conditioning,
-                                                         expected_negative_conditioning,
-                                                         cfg_scale)
+                                                         expected_negative_conditioning)
 
 
-    def test_basic_with_negative_prompt_to_conditioning(self):
-        csf = make_dummy_conditioning_scheduler_factor()
-        # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
-        # "a b c [ c b a ]" makes it to the Conditioning intact for t=0, t=0.5, t=1
-        prompt_string = " ".join(KNOWN_WORDS[:3]) + " [ " + " ".join(reversed(KNOWN_WORDS[:3])) + " ] "
-        cfg_scale = 7.5
-        conditioning_scheduler = csf.make_conditioning_scheduler(prompt_string, cfg_scale)
-        expected_positive_conditioning = csf.text_encoder(torch.Tensor(reversed(KNOWN_WORDS_TOKEN_IDS[:3])))
-        expected_negative_conditioning = csf.text_encoder(torch.Tensor(KNOWN_WORDS_TOKEN_IDS[:3]))
+    def test_basic_negative_prompt(self):
+        tokenizer = DummyTokenizer()
+        text_encoder = DummyTransformer()
+        incite = Incite(tokenizer=tokenizer, text_encoder=text_encoder)
+
+        # positive "a b c" negative "c b a" makes it to the Conditioning intact for t=0, t=0.5, t=1
+        positive_prompt = " ".join(KNOWN_WORDS[:3])
+        negative_prompt = " ".join(reversed(KNOWN_WORDS[:3]))
+        conditioning_scheduler = incite.make_conditioning_scheduler(positive_prompt, negative_prompt)
+        expected_positive_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3])
+        expected_negative_conditioning = make_test_conditioning(text_encoder, tokenizer, list(reversed(KNOWN_WORDS_TOKEN_IDS[:3]))
+        )
         self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
                                                          expected_positive_conditioning,
-                                                         expected_negative_conditioning,
-                                                         cfg_scale)
+                                                         expected_negative_conditioning)
+
+    def test_too_long_prompt(self):
+        tokenizer = DummyTokenizer()
+        text_encoder = DummyTransformer()
+        incite = Incite(tokenizer=tokenizer, text_encoder=text_encoder)
+
+        # positive "a b c" negative "c b a" makes it to the Conditioning intact for t=0, t=0.5, t=1
+        positive_prompt = " ".join(KNOWN_WORDS[:3] * 40)
+        conditioning_scheduler = incite.make_conditioning_scheduler(positive_prompt)
+        expected_positive_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3] * 40)
+        expected_negative_conditioning = make_test_conditioning(text_encoder, tokenizer, [])
+        self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
+                                                         expected_positive_conditioning,
+                                                         expected_negative_conditioning)
 
 
     def assert_constant_scheduling_matches_expected(self,
-                                                    conditioning_scheduler: StaticConditioningScheduler,
+                                                    conditioning_scheduler: ConditioningScheduler,
                                                     expected_positive_conditioning: torch.Tensor,
-                                                    expected_negative_conditioning: torch.Tensor,
-                                                    cfg_scale: float):
+                                                    expected_negative_conditioning: torch.Tensor):
+        self.assertIs(StaticConditioningScheduler, type(conditioning_scheduler))
+
         conditioning_at_start = conditioning_scheduler.get_conditioning_for_step_pct(0)
-        self.assertEqual(cfg_scale, conditioning_at_start.cfg_scale)
-        self.assertTrue(torch.equal(expected_positive_conditioning, conditioning_at_start.positive_conditioning))
-        self.assertTrue(torch.equal(expected_negative_conditioning, conditioning_at_start.negative_conditioning))
+        self.assertTrue(torch.allclose(expected_positive_conditioning,
+                                       conditioning_at_start.positive_conditioning,
+                                       atol=1e-6))
+        self.assertTrue(torch.allclose(expected_negative_conditioning,
+                                       conditioning_at_start.negative_conditioning,
+                                       atol=1e-6))
 
         conditioning_at_mid = conditioning_scheduler.get_conditioning_for_step_pct(0.5)
-        self.assertEqual(cfg_scale, conditioning_at_mid.cfg_scale)
-        self.assertTrue(torch.equal(expected_positive_conditioning, conditioning_at_mid.positive_conditioning))
-        self.assertTrue(torch.equal(expected_negative_conditioning, conditioning_at_mid.negative_conditioning))
+        self.assertTrue(torch.allclose(expected_positive_conditioning,
+                                       conditioning_at_mid.positive_conditioning,
+                                       atol=1e-6))
+        self.assertTrue(torch.allclose(expected_negative_conditioning,
+                                       conditioning_at_mid.negative_conditioning,
+                                       atol=1e-6))
 
         conditioning_at_end = conditioning_scheduler.get_conditioning_for_step_pct(1.0)
-        self.assertEqual(cfg_scale, conditioning_at_end.cfg_scale)
-        self.assertTrue(torch.equal(expected_positive_conditioning, conditioning_at_end.positive_conditioning))
-        self.assertTrue(torch.equal(expected_negative_conditioning, conditioning_at_end.negative_conditioning))
+        self.assertTrue(torch.allclose(expected_positive_conditioning,
+                                       conditioning_at_end.positive_conditioning,
+                                       atol=1e-6))
+        self.assertTrue(torch.allclose(expected_negative_conditioning,
+                                       conditioning_at_end.negative_conditioning,
+                                       atol=1e-6))
 
 
-    def test_something(self):
-        self.assertEqual(True, False)  # add assertion here
 
 
 if __name__ == '__main__':
