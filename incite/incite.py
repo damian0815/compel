@@ -3,9 +3,9 @@ from typing import Union
 import torch
 from transformers import CLIPTokenizer, CLIPTextModel
 
-from src.conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
-from src.embeddings_provider import EmbeddingsProvider
-from src.prompt_parser import Blend, FlattenedPrompt, PromptParser
+from incite.conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
+from incite.embeddings_provider import EmbeddingsProvider
+from incite.prompt_parser import Blend, FlattenedPrompt, PromptParser
 
 
 class Incite:

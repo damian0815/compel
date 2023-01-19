@@ -2,10 +2,10 @@ import unittest
 
 import torch
 
-from src.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
+from incite.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
 from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
-from src.incite import Incite
+from incite.incite import Incite
 
 
 def make_dummy_incite():

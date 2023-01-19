@@ -3,7 +3,7 @@ import unittest
 
 import torch
 
-from src.embeddings_provider import EmbeddingsProvider
+from incite.embeddings_provider import EmbeddingsProvider
 from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
 def make_dummy_embeddings_provider(max_length=10) -> EmbeddingsProvider:
