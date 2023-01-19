@@ -1,0 +1,22 @@
+[project]
+name = "incite"
+version = "0.1.0"
+authors = [
+  { name="Damian Stewart", email="null@damianstewart.com" },
+]
+description = "A prompting enhancement library for transformers-type text embedding systems"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: AGPL License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/damian0815/incite"
+"Bug Tracker" = "https://github.com/damian0815/incite/issues"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"

@@ -2,7 +2,7 @@ import unittest
 
 import pyparsing
 
-from incite.prompt_parser import PromptParser, Blend, Conjunction, FlattenedPrompt, CrossAttentionControlSubstitute, \
+from src.prompt_parser import PromptParser, Blend, Conjunction, FlattenedPrompt, CrossAttentionControlSubstitute, \
     Fragment
 
 
