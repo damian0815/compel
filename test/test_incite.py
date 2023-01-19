@@ -2,36 +2,28 @@ import unittest
 
 import torch
 
-from incite.conditioning_scheduler import ConditioningSchedulerFactory, StaticConditioningScheduler
-from incite.prompt_to_embeddings_converter import PromptToEmbeddingsConverter
-from incite.textual_inversion_manager import TextualInversionManager
-from test.prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
+from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
+
+from incite.incite import Incite
 
 
-def make_dummy_conditioning_scheduler_factor():
+def make_dummy_incite():
     tokenizer = DummyTokenizer()
     text_encoder = DummyTransformer()
-    textual_inversion_manager = TextualInversionManager(tokenizer, text_encoder)
-    return ConditioningSchedulerFactory(
-        prompt_to_embeddings_converter=PromptToEmbeddingsConverter(
-            tokenizer=tokenizer,
-            text_encoder=text_encoder,
-            textual_inversion_manager=textual_inversion_manager
-        )
-    )
+    return Incite(tokenizer=tokenizer, text_encoder=text_encoder)
 
 
 class TestPromptToEmbeddings(unittest.TestCase):
 
     def test_basic_prompt_to_conditioning(self):
-        csf = make_dummy_conditioning_scheduler_factor()
+        incite = make_dummy_incite()
 
         # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
         prompt_string = " ".join(KNOWN_WORDS[:3])
         cfg_scale = 7.5
-        conditioning_scheduler = csf.make_conditioning_scheduler(prompt_string, cfg_scale=cfg_scale)
-        expected_positive_conditioning = csf.text_encoder(torch.Tensor([]))
-        expected_negative_conditioning = csf.text_encoder(torch.Tensor(KNOWN_WORDS_TOKEN_IDS[:3]))
+        conditioning_scheduler = incite.make_conditioning_scheduler(prompt_string, cfg_scale=cfg_scale)
+        expected_positive_conditioning = incite.text_encoder(torch.Tensor([]))
+        expected_negative_conditioning = incite.text_encoder(torch.Tensor(KNOWN_WORDS_TOKEN_IDS[:3]))
         self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
                                                          expected_positive_conditioning,
                                                          expected_negative_conditioning,

@@ -653,36 +653,3 @@ def split_weighted_subprompts(text, skip_normalize=False)->list:
         return [(x[0], equal_weight) for x in parsed_prompts]
     return [(x[0], x[1] / weight_sum) for x in parsed_prompts]
 
-
-def parse_prompt_string(prompt_string_in: str) -> tuple[Union[FlattenedPrompt, Blend], FlattenedPrompt]:
-    """
-    Parse a prompt string and return a structure positive and negative prompt, either or both of which may be empty.
-
-    :param prompt_string_in: The prompt to parse, including any negative prompts contained in `[]` square brackets.
-    :return: A tuple structured objects representing `(positive_prompt, negative_prompt)`.
-    """
-    prompt_string_uncleaned = prompt_string_in
-
-    # Extract Unconditioned Words From Prompt
-    negative_parts_regex = r'\[(.*?)\]'
-    negative_parts = ' '.join(re.findall(negative_parts_regex, prompt_string_uncleaned))
-
-    if len(negative_parts) == 0:
-        prompt_string_cleaned = prompt_string_uncleaned
-    else:
-        # Remove Unconditioned Words From Prompt
-        unconditional_regex_compile = re.compile(negative_parts_regex)
-        clean_prompt = unconditional_regex_compile.sub(' ', prompt_string_uncleaned)
-        prompt_string_cleaned = re.sub(' +', ' ', clean_prompt)
-
-    pp = PromptParser()
-    legacy_blend: Blend = pp.parse_legacy_blend(prompt_string_cleaned, skip_normalize=False)
-    if legacy_blend is not None:
-        parsed_prompt = legacy_blend
-    else:
-        conjunction = pp.parse_conjunction(prompt_string_cleaned)
-        # we don't support conjunctions for now
-        parsed_prompt = conjunction.prompts[0]
-
-    parsed_negative_prompt: FlattenedPrompt = pp.parse_conjunction(negative_parts).prompts[0]
-    return parsed_prompt, parsed_negative_prompt
