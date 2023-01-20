@@ -2,6 +2,9 @@ import string
 from typing import Union, Optional
 import re
 import pyparsing as pp
+
+__all__ = ["PromptParser"]
+
 '''
 This module parses prompt strings and produces tree-like structures that can be used generate and control the conditioning tensors.
 weighted subprompts.

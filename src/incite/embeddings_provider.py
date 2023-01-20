@@ -3,6 +3,7 @@ import math
 import torch
 from transformers import CLIPTokenizer, CLIPTextModel
 
+__all__ = ["EmbeddingsProvider"]
 
 class EmbeddingsProvider:
 

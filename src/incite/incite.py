@@ -3,10 +3,11 @@ from typing import Union
 import torch
 from transformers import CLIPTokenizer, CLIPTextModel
 
-from src.incite.conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
-from src.incite.embeddings_provider import EmbeddingsProvider
-from src.incite.prompt_parser import Blend, FlattenedPrompt, PromptParser
+from .conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
+from .embeddings_provider import EmbeddingsProvider
+from .prompt_parser import Blend, FlattenedPrompt, PromptParser
 
+__all__ = ["Incite"]
 
 class Incite:
 
