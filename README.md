@@ -1,11 +1,11 @@
-# compel
-A text prompt weighting and blending library for transformers-type text embedding systems, by @damian0815.
+# Compel
+A text prompt weighting and blending library for transformers-type text embedding systems, by [@damian0815](https://github.com/damian0815).
 
 With a flexible and intuitive syntax, you can re-weight different parts of a prompt string and thus re-weight the different parts of the embeddning tensor produced from the string.
 
-Tested and developed against Hugging Face's `StableDiffusionPipeline` but it should work with any diffsers-based system that uses an `Tokenizer` and a `Text Encoder` of some kind.  
+Tested and developed against Hugging Face's `StableDiffusionPipeline` but it should work with any diffusers-based system that uses an `Tokenizer` and a `Text Encoder` of some kind.  
 
-Adapted from the InvokeAI prompting code (also by @damian0815). For now, the syntax is fully documented [here](https://invoke-ai.github.io/InvokeAI/features/PROMPTS/).
+Adapted from the [InvokeAI](https://github.com/invoke-ai) prompting code (also by [@damian0815](https://github.com/damian0815)). For now, the syntax is fully documented [here](https://invoke-ai.github.io/InvokeAI/features/PROMPTS/#prompt-syntax-features) - note however that cross-attention control `.swap()` is currently ignored by Compel.
 
 ### Demo
 
