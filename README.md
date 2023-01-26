@@ -7,6 +7,10 @@ Tested and developed against Hugging Face's `StableDiffusionPipeline` but it sho
 
 Adapted from the [InvokeAI](https://github.com/invoke-ai) prompting code (also by [@damian0815](https://github.com/damian0815)). For now, the syntax is fully documented [here](https://invoke-ai.github.io/InvokeAI/features/PROMPTS/#prompt-syntax-features) - note however that cross-attention control `.swap()` is currently ignored by Compel.
 
+### Installation
+
+`pip install compel`
+
 ### Demo
 
 see [compel-demo.ipynb](compel-demo.ipynb)
