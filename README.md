@@ -3,6 +3,10 @@ A prompting enhancement library for transformers-type text embedding systems, by
 
 Adapted from the InvokeAI prompting code (also by @damian0815). For now, the syntax is fully documented [here](https://invoke-ai.github.io/InvokeAI/features/PROMPTS/).
 
+### Installation
+
+`pip install compel`
+
 ### Demo
 
 see [compel-demo.ipynb](compel-demo.ipynb)
