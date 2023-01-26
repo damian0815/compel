@@ -12,7 +12,7 @@ def make_dummy_embeddings_provider(max_length=10) -> EmbeddingsProvider:
     return EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder)
 
 
-class MyTestCase(unittest.TestCase):
+class EmbeddingsProviderTestCase(unittest.TestCase):
 
     def test_get_token_ids(self):
         ep = make_dummy_embeddings_provider()

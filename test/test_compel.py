@@ -27,17 +27,17 @@ def make_test_conditioning(text_encoder: DummyTransformer, tokenizer: DummyToken
     return conditioning
 
 
-class TestPromptToEmbeddings(unittest.TestCase):
+class CompelTestCase(unittest.TestCase):
 
     def test_basic_prompt(self):
         tokenizer = DummyTokenizer()
         text_encoder = DummyTransformer()
-        incite = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
 
         # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
         prompt = " ".join(KNOWN_WORDS[:3])
-        conditioning_scheduler = incite.make_conditioning_scheduler(prompt)
-        conditioning_scheduler_2 = incite.make_conditioning_scheduler(prompt)
+        conditioning_scheduler = compel.make_conditioning_scheduler(prompt)
+        conditioning_scheduler_2 = compel.make_conditioning_scheduler(prompt)
         expected_positive_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3])
         expected_negative_conditioning = make_test_conditioning(text_encoder, tokenizer, [])
         self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
@@ -48,12 +48,12 @@ class TestPromptToEmbeddings(unittest.TestCase):
     def test_basic_negative_prompt(self):
         tokenizer = DummyTokenizer()
         text_encoder = DummyTransformer()
-        incite = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
 
         # positive "a b c" negative "c b a" makes it to the Conditioning intact for t=0, t=0.5, t=1
         positive_prompt = " ".join(KNOWN_WORDS[:3])
         negative_prompt = " ".join(reversed(KNOWN_WORDS[:3]))
-        conditioning_scheduler = incite.make_conditioning_scheduler(positive_prompt, negative_prompt)
+        conditioning_scheduler = compel.make_conditioning_scheduler(positive_prompt, negative_prompt)
         expected_positive_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3])
         expected_negative_conditioning = make_test_conditioning(text_encoder, tokenizer, list(reversed(KNOWN_WORDS_TOKEN_IDS[:3]))
         )
@@ -64,11 +64,11 @@ class TestPromptToEmbeddings(unittest.TestCase):
     def test_too_long_prompt(self):
         tokenizer = DummyTokenizer()
         text_encoder = DummyTransformer()
-        incite = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
 
         # positive "a b c" negative "c b a" makes it to the Conditioning intact for t=0, t=0.5, t=1
         positive_prompt = " ".join(KNOWN_WORDS[:3] * 40)
-        conditioning_scheduler = incite.make_conditioning_scheduler(positive_prompt)
+        conditioning_scheduler = compel.make_conditioning_scheduler(positive_prompt)
         expected_positive_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3] * 40)
         expected_negative_conditioning = make_test_conditioning(text_encoder, tokenizer, [])
         self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
@@ -80,11 +80,11 @@ class TestPromptToEmbeddings(unittest.TestCase):
         device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
         tokenizer = DummyTokenizer()
         text_encoder = DummyTransformer(device=device)
-        incite = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
 
         # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
         prompt = " ".join(KNOWN_WORDS[:3])
-        conditioning_scheduler = incite.make_conditioning_scheduler(prompt)
+        conditioning_scheduler = compel.make_conditioning_scheduler(prompt)
         expected_positive_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3])
         expected_negative_conditioning = make_test_conditioning(text_encoder, tokenizer, [])
         self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
