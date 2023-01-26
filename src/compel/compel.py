@@ -14,6 +14,10 @@ class Compel:
     def __init__(self, tokenizer: CLIPTokenizer, text_encoder: CLIPTextModel):
         self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder)
 
+    @property
+    def device(self):
+        return self.conditioning_provider.device
+
     def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str='') -> ConditioningScheduler:
         positive_conditioning = self.build_conditioning_tensor(positive_prompt)
         negative_conditioning = self.build_conditioning_tensor(negative_prompt)
@@ -66,7 +70,8 @@ class Compel:
         weights = [x.weight for x in prompt.children]
         conditioning = self.conditioning_provider.get_embeddings_for_weighted_prompt_fragments(text_batch=[fragments],
                                                                                                fragment_weights_batch=[
-                                                                                                   weights])
+                                                                                                   weights]
+                                                                                               )
         return conditioning
 
     def _get_conditioning_for_blend(self, blend: Blend):

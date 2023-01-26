@@ -13,6 +13,10 @@ class EmbeddingsProvider:
         # self.textual_inversion_manager = TextualInversionManager(tokenizer=tokenizer, text_encoder=text_encoder)
 
     @property
+    def device(self):
+        return self.text_encoder.device
+
+    @property
     def max_token_count(self) -> int:
         return self.tokenizer.model_max_length
 
@@ -30,7 +34,7 @@ class EmbeddingsProvider:
 
     def get_embeddings_for_weighted_prompt_fragments(self, text_batch: list[list[str]],
                                                      fragment_weights_batch: list[list[float]],
-                                                     should_return_tokens: bool = False, device='cpu') -> torch.Tensor:
+                                                     should_return_tokens: bool = False) -> torch.Tensor:
         """
 
         :param text_batch: A list of fragments of text to which different weights are to be applied.
@@ -58,7 +62,7 @@ class EmbeddingsProvider:
             # closer the resulting embedding is to an embedding for a prompt that simply lacks this fragment.
 
             # handle weights >=1
-            tokens, per_token_weights = self.get_token_ids_and_expand_weights(fragments, weights, device=device)
+            tokens, per_token_weights = self.get_token_ids_and_expand_weights(fragments, weights)
             base_embedding = self.build_weighted_embedding_tensor(tokens, per_token_weights)
 
             # this is our starting point
@@ -78,8 +82,7 @@ class EmbeddingsProvider:
                     fragments_without_this = fragments[:index] + fragments[index + 1:]
                     weights_without_this = weights[:index] + weights[index + 1:]
                     tokens, per_token_weights = self.get_token_ids_and_expand_weights(fragments_without_this,
-                                                                                      weights_without_this,
-                                                                                      device=device)
+                                                                                      weights_without_this)
                     embedding_without_this = self.build_weighted_embedding_tensor(tokens, per_token_weights)
 
                     embeddings = torch.cat((embeddings, embedding_without_this.unsqueeze(0)), dim=1)
@@ -161,7 +164,7 @@ class EmbeddingsProvider:
 
         return result
 
-    def get_token_ids_and_expand_weights(self, fragments: list[str], weights: list[float], device: str) -> (torch.Tensor, torch.Tensor):
+    def get_token_ids_and_expand_weights(self, fragments: list[str], weights: list[float]) -> (torch.Tensor, torch.Tensor):
         '''
         Given a list of text fragments and corresponding weights: tokenize each fragment, append the token sequences
         together and return a padded token sequence starting with the bos marker, ending with the eos marker, and padded
@@ -209,8 +212,8 @@ class EmbeddingsProvider:
         all_token_ids += [self.tokenizer.eos_token_id] * pad_length
         per_token_weights += [1.0] * pad_length
 
-        all_token_ids_tensor = torch.tensor(all_token_ids, dtype=torch.long, device=device)
-        per_token_weights_tensor = torch.tensor(per_token_weights, dtype=torch.float32, device=device)
+        all_token_ids_tensor = torch.tensor(all_token_ids, dtype=torch.long, device=self.device)
+        per_token_weights_tensor = torch.tensor(per_token_weights, dtype=torch.float32, device=self.device)
         #print(f"assembled all_token_ids_tensor with shape {all_token_ids_tensor.shape}")
         return all_token_ids_tensor, per_token_weights_tensor
 
@@ -232,7 +235,7 @@ class EmbeddingsProvider:
         empty_token_ids = torch.tensor([self.tokenizer.bos_token_id] +
                                        [self.tokenizer.pad_token_id] * (self.max_token_count - 2) +
                                        [self.tokenizer.eos_token_id], dtype=torch.int,
-                                       device=token_ids.device).unsqueeze(0)
+                                       device=self.device).unsqueeze(0)
         empty_z = self.text_encoder(input_ids=empty_token_ids).last_hidden_state
         batch_weights_expanded = per_token_weights.reshape(per_token_weights.shape + (1,)).expand(z.shape)
         z_delta_from_empty = z - empty_z

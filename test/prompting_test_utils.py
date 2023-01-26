@@ -22,8 +22,9 @@ class Object(object):
 
 class DummyTransformer:
 
-    def __init__(self):
+    def __init__(self, device="cpu"):
         self.embeddings = DummyEmbeddingsList([make_dummy_embedding() for _ in range(len(KNOWN_WORDS)+2)])
+        self.device = device
 
     def resize_token_embeddings(self, new_size=None):
         if new_size is None:
@@ -37,11 +38,12 @@ class DummyTransformer:
     def get_input_embeddings(self):
         return self.embeddings
 
-    def forward(self, input_ids: torch.Tensor, return_dict: bool=True) -> torch.Tensor:
+    def forward(self, input_ids: torch.Tensor, return_dict: bool=True):
         if input_ids.shape[0] > 1:
             raise AssertionError("for unit testing, only batch size =1 is supported")
-        all_embeddings = torch.cat([e.unsqueeze(0) for e in self.embeddings])
-        embeddings = torch.index_select(all_embeddings, dim=0, index=input_ids.squeeze(0)).unsqueeze(0)
+        all_embeddings = torch.cat([e.unsqueeze(0) for e in self.embeddings]).to(self.device)
+        embeddings = torch.index_select(all_embeddings, dim=0, index=input_ids.squeeze(0)
+                                        ).unsqueeze(0)
         if not return_dict:
             return [embeddings, torch.empty_like(embeddings)]
         o = Object()

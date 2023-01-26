@@ -20,7 +20,10 @@ def make_test_conditioning(text_encoder: DummyTransformer, tokenizer: DummyToken
     post_padding = [tokenizer.eos_token_id] * (tokenizer.model_max_length - len(token_ids) - 1)
     token_ids = pre_padding + token_ids + post_padding
     assert len(token_ids) == tokenizer.model_max_length
-    conditioning =  text_encoder(input_ids=torch.tensor(token_ids, dtype=torch.int).unsqueeze(0)).last_hidden_state
+    conditioning =  text_encoder(input_ids=torch.tensor(token_ids,
+                                                        dtype=torch.int,
+                                                        device=text_encoder.device
+                                                        ).unsqueeze(0)).last_hidden_state
     return conditioning
 
 
@@ -67,6 +70,22 @@ class TestPromptToEmbeddings(unittest.TestCase):
         positive_prompt = " ".join(KNOWN_WORDS[:3] * 40)
         conditioning_scheduler = incite.make_conditioning_scheduler(positive_prompt)
         expected_positive_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3] * 40)
+        expected_negative_conditioning = make_test_conditioning(text_encoder, tokenizer, [])
+        self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
+                                                         expected_positive_conditioning,
+                                                         expected_negative_conditioning)
+
+
+    def test_device(self):
+        device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
+        tokenizer = DummyTokenizer()
+        text_encoder = DummyTransformer(device=device)
+        incite = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
+
+        # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
+        prompt = " ".join(KNOWN_WORDS[:3])
+        conditioning_scheduler = incite.make_conditioning_scheduler(prompt)
+        expected_positive_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3])
         expected_negative_conditioning = make_test_conditioning(text_encoder, tokenizer, [])
         self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
                                                          expected_positive_conditioning,
