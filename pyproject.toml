@@ -1,10 +1,10 @@
 [project]
-name = "incite"
+name = "compel"
 version = "0.1.0"
 authors = [
   { name="Damian Stewart", email="null@damianstewart.com" },
 ]
-description = "A prompting enhancement library for transformers-type text embedding systems"
+description = "A prompting enhancement library for transformers-type text embedding systems."
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -13,15 +13,15 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "diffusers ~= 0.11",
+    "diffusers >= 0.11",
     "pyparsing ~= 3.0",
     "torch",
     "transformers ~= 4.25"
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/damian0815/incite"
-"Bug Tracker" = "https://github.com/damian0815/incite/issues"
+"Homepage" = "https://github.com/damian0815/compel"
+"Bug Tracker" = "https://github.com/damian0815/compel/issues"
 
 [build-system]
 requires = ["setuptools>=61.0"]

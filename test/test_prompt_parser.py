@@ -1,6 +1,6 @@
 import unittest
 
-from src.incite.prompt_parser import PromptParser, Blend, Conjunction, FlattenedPrompt, CrossAttentionControlSubstitute, \
+from src.compel.prompt_parser import PromptParser, Blend, Conjunction, FlattenedPrompt, CrossAttentionControlSubstitute, \
     Fragment
 
 

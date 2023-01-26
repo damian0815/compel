@@ -2,16 +2,16 @@ import unittest
 
 import torch
 
-from src.incite.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
+from src.compel.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
 from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
-from src.incite.incite import Incite
+from src.compel.compel import Compel
 
 
-def make_dummy_incite():
+def make_dummy_compel():
     tokenizer = DummyTokenizer()
     text_encoder = DummyTransformer()
-    return Incite(tokenizer=tokenizer, text_encoder=text_encoder)
+    return Compel(tokenizer=tokenizer, text_encoder=text_encoder)
 
 
 def make_test_conditioning(text_encoder: DummyTransformer, tokenizer: DummyTokenizer, token_ids: list[int]) -> torch.Tensor:
@@ -29,7 +29,7 @@ class TestPromptToEmbeddings(unittest.TestCase):
     def test_basic_prompt(self):
         tokenizer = DummyTokenizer()
         text_encoder = DummyTransformer()
-        incite = Incite(tokenizer=tokenizer, text_encoder=text_encoder)
+        incite = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
 
         # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
         prompt = " ".join(KNOWN_WORDS[:3])
@@ -45,7 +45,7 @@ class TestPromptToEmbeddings(unittest.TestCase):
     def test_basic_negative_prompt(self):
         tokenizer = DummyTokenizer()
         text_encoder = DummyTransformer()
-        incite = Incite(tokenizer=tokenizer, text_encoder=text_encoder)
+        incite = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
 
         # positive "a b c" negative "c b a" makes it to the Conditioning intact for t=0, t=0.5, t=1
         positive_prompt = " ".join(KNOWN_WORDS[:3])
@@ -61,7 +61,7 @@ class TestPromptToEmbeddings(unittest.TestCase):
     def test_too_long_prompt(self):
         tokenizer = DummyTokenizer()
         text_encoder = DummyTransformer()
-        incite = Incite(tokenizer=tokenizer, text_encoder=text_encoder)
+        incite = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
 
         # positive "a b c" negative "c b a" makes it to the Conditioning intact for t=0, t=0.5, t=1
         positive_prompt = " ".join(KNOWN_WORDS[:3] * 40)

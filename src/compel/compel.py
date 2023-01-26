@@ -7,9 +7,9 @@ from .conditioning_scheduler import ConditioningScheduler, StaticConditioningSch
 from .embeddings_provider import EmbeddingsProvider
 from .prompt_parser import Blend, FlattenedPrompt, PromptParser
 
-__all__ = ["Incite"]
+__all__ = ["Compel"]
 
-class Incite:
+class Compel:
 
     def __init__(self, tokenizer: CLIPTokenizer, text_encoder: CLIPTextModel):
         self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder)
