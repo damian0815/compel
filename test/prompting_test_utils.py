@@ -23,7 +23,7 @@ class Object(object):
 class DummyTransformer:
 
     def __init__(self, device="cpu"):
-        self.embeddings = DummyEmbeddingsList([make_dummy_embedding() for _ in range(len(KNOWN_WORDS)+2)])
+        self.embeddings = DummyEmbeddingsList([make_dummy_embedding() for _ in range(len(KNOWN_WORDS)+3)])
         self.device = device
 
     def resize_token_embeddings(self, new_size=None):
@@ -55,10 +55,10 @@ class DummyTransformer:
 
 class DummyTokenizer():
     def __init__(self, model_max_length=77):
-        self.tokens = KNOWN_WORDS.copy() + ["<|bos|>", "<|eos|>"]
-        self.bos_token_id = len(self.tokens)-2
+        self.tokens = KNOWN_WORDS.copy() + ["<|bos|>", "<|pad|>", "<|eos|>"]
+        self.bos_token_id = len(self.tokens)-3
+        self.pad_token_id = len(self.tokens)-2
         self.eos_token_id = len(self.tokens)-1
-        self.pad_token_id = self.eos_token_id
         self.unk_token_id = self.eos_token_id
         self.model_max_length = model_max_length
 

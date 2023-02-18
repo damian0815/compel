@@ -17,7 +17,7 @@ def make_dummy_compel():
 def make_test_conditioning(text_encoder: DummyTransformer, tokenizer: DummyTokenizer, token_ids: list[int]) -> torch.Tensor:
     pre_padding = [tokenizer.bos_token_id]
     token_ids = token_ids[0:tokenizer.model_max_length-2]
-    post_padding = [tokenizer.eos_token_id] * (tokenizer.model_max_length - len(token_ids) - 1)
+    post_padding = [tokenizer.eos_token_id] + [tokenizer.pad_token_id] * (tokenizer.model_max_length - len(token_ids) - 2)
     token_ids = pre_padding + token_ids + post_padding
     assert len(token_ids) == tokenizer.model_max_length
     conditioning =  text_encoder(input_ids=torch.tensor(token_ids,
