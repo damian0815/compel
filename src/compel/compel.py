@@ -85,7 +85,7 @@ class Compel:
         fragments = [x.text for x in prompt.children]
         weights = [x.weight for x in prompt.children]
         conditioning, tokens = self.conditioning_provider.get_embeddings_for_weighted_prompt_fragments(
-            text_batch=[fragments], fragment_weights_batch=[weights], should_return_tokens=True)
+            text_batch=[fragments], fragment_weights_batch=[weights], should_return_tokens=True, device=self.device)
         if should_return_tokens:
             return conditioning, tokens
         else:
