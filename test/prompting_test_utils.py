@@ -20,6 +20,9 @@ def make_dummy_embedding():
 class Object(object):
     pass
 
+
+
+
 class DummyTransformer:
 
     def __init__(self, device="cpu"):
@@ -42,16 +45,24 @@ class DummyTransformer:
         if input_ids.shape[0] > 1:
             raise AssertionError("for unit testing, only batch size =1 is supported")
         all_embeddings = torch.cat([e.unsqueeze(0) for e in self.embeddings]).to(self.device)
-        embeddings = torch.index_select(all_embeddings, dim=0, index=input_ids.squeeze(0)
+        embeddings = torch.index_select(all_embeddings, dim=0, index=input_ids.to(self.device).squeeze(0)
                                         ).unsqueeze(0)
         if not return_dict:
             return [embeddings, torch.empty_like(embeddings)]
-        o = Object()
-        o.last_hidden_state = embeddings
+
+        class EmbeddingsObject:
+            def __init__(self, last_hidden_state):
+                self.last_hidden_state = last_hidden_state
+
+            def __getitem__(self, item):
+                assert item == 0
+                return self.last_hidden_state
+
+        o = EmbeddingsObject(embeddings)
         return o
 
     def __call__(self, input_ids, **kwargs):
-        return self.forward(input_ids=input_ids)
+        return self.forward(input_ids=input_ids, return_dict=True)
 
 class DummyTokenizer():
     def __init__(self, model_max_length=77):

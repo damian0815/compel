@@ -16,7 +16,7 @@ class Compel:
 
     @property
     def device(self):
-        return self.conditioning_provider.device
+        return self.conditioning_provider.text_encoder.device
 
     def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str='') -> ConditioningScheduler:
         positive_conditioning = self.build_conditioning_tensor(positive_prompt)
