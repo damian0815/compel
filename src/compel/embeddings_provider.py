@@ -48,7 +48,7 @@ class EmbeddingsProvider:
                                                      text_batch: list[list[str]],
                                                      fragment_weights_batch: list[list[float]],
                                                      should_return_tokens: bool = False,
-                                                     device='cpu'
+                                                     device='cpu',
                                  ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         """
 
