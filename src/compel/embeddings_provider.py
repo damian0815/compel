@@ -11,6 +11,7 @@ class EmbeddingsProvider:
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
         # self.textual_inversion_manager = TextualInversionManager(tokenizer=tokenizer, text_encoder=text_encoder)
+        self.textual_inversion_manager = None
 
     @property
     def device(self):
@@ -139,9 +140,7 @@ class EmbeddingsProvider:
         # (part of `transformers` lib)
         token_ids_list = self.tokenizer(
             texts,
-            truncation=True,
-            max_length=self.max_token_count,
-            return_overflowing_tokens=False,
+            truncation=False,
             padding='do_not_pad',
             return_tensors=None,  # just give me lists of ints
         )['input_ids']
@@ -151,11 +150,10 @@ class EmbeddingsProvider:
             # trim eos/bos
             token_ids = token_ids[1:-1]
 
-            ## pad for textual inversions with vector length >1
-            # token_ids = self.textual_inversion_manager.expand_textual_inversion_token_ids_if_necessary(token_ids)
+            # pad for textual inversions with vector length >1
+            if self.textual_inversion_manager is not None:
+                token_ids = self.textual_inversion_manager.expand_textual_inversion_token_ids_if_necessary(token_ids)
 
-            # truncate if necessary to max_length-2 (leaving room for bos/eos)
-            token_ids = token_ids[0:self.max_token_count - 2]
             # add back eos/bos if requested
             if include_start_and_end_markers:
                 token_ids = [self.tokenizer.bos_token_id] + token_ids + [self.tokenizer.eos_token_id]
@@ -184,49 +182,63 @@ class EmbeddingsProvider:
             fragments = ['']
             weights = [1.0]
         per_fragment_token_ids = self.get_token_ids(fragments, include_start_and_end_markers=False)
-        all_token_ids = []
-        per_token_weights = []
+        all_token_ids: list[int] = []
+        all_token_weights: list[float] = []
         #print("all fragments:", fragments, weights)
         for this_fragment_token_ids, weight in zip(per_fragment_token_ids, weights):
             # append
             all_token_ids += this_fragment_token_ids
             # fill out weights tensor with one float per token
-            per_token_weights += [float(weight)] * len(this_fragment_token_ids)
+            all_token_weights += [float(weight)] * len(this_fragment_token_ids)
 
-        # leave room for bos/eos
-        max_token_count_without_bos_eos_markers = self.max_token_count - 2
-        if len(all_token_ids) > max_token_count_without_bos_eos_markers:
-            excess_token_count = len(all_token_ids) - max_token_count_without_bos_eos_markers
-            # TODO build nice description string of how the truncation was applied
-            # this should be done by calling self.tokenizer.convert_ids_to_tokens() then passing the result to
-            # self.tokenizer.convert_tokens_to_string() for the token_ids on each side of the truncation limit.
-            print(f">> Prompt is {excess_token_count} token(s) too long and has been truncated")
-            all_token_ids = all_token_ids[0:max_token_count_without_bos_eos_markers]
-            per_token_weights = per_token_weights[0:max_token_count_without_bos_eos_markers]
+        return self._chunk_and_pad_token_ids(all_token_ids, all_token_weights)
 
-        # pad out to a self.max_length-entry array: [eos_token, <prompt tokens>, eos_token[, pad_token, ...]]
-        # (typically self.max_length == 77)
-        all_token_ids = [self.tokenizer.bos_token_id] + all_token_ids + [self.tokenizer.eos_token_id]
-        per_token_weights = [1.0] + per_token_weights + [1.0]
-        pad_length = self.max_token_count - len(all_token_ids)
-        all_token_ids += [self.tokenizer.pad_token_id] * pad_length
-        per_token_weights += [1.0] * pad_length
+    def _chunk_and_pad_token_ids(self, token_ids: list[int], token_weights: list[float]
+                                 ) -> tuple[torch.Tensor, torch.Tensor]:
+
+        remaining_token_ids = token_ids
+        remaining_token_weights = token_weights
+        chunk_length_without_eos_bos_markers = self.max_token_count - 2
+
+        all_token_ids = []
+        all_token_weights = []
+        while remaining_token_ids:
+            # each chunk must leave room for bos/eos
+            chunk_token_ids = remaining_token_ids[0:chunk_length_without_eos_bos_markers]
+            chunk_token_weights = remaining_token_weights[0:chunk_length_without_eos_bos_markers]
+            # update remaining
+            remaining_token_ids = remaining_token_ids[chunk_length_without_eos_bos_markers:]
+            remaining_token_weights = remaining_token_weights[chunk_length_without_eos_bos_markers:]
+
+            # pad out to a self.max_length-entry array: [eos_token, <prompt tokens>, eos_token[, pad_token, ...]]
+            # (typically self.max_length == 77)
+            chunk_token_ids = [self.tokenizer.bos_token_id] + chunk_token_ids + [self.tokenizer.eos_token_id]
+            chunk_token_weights = [1.0] + chunk_token_weights + [1.0]
+            pad_length = self.max_token_count - len(chunk_token_ids)
+            chunk_token_ids += [self.tokenizer.pad_token_id] * pad_length
+            chunk_token_weights += [1.0] * pad_length
+
+            all_token_ids += chunk_token_ids
+            all_token_weights += chunk_token_weights
 
         all_token_ids_tensor = torch.tensor(all_token_ids, dtype=torch.long, device=self.device)
-        per_token_weights_tensor = torch.tensor(per_token_weights, dtype=torch.float32, device=self.device)
+        all_per_token_weights_tensor = torch.tensor(all_token_weights, dtype=torch.float32, device=self.device)
         #print(f"assembled all_token_ids_tensor with shape {all_token_ids_tensor.shape}")
-        return all_token_ids_tensor, per_token_weights_tensor
+        return all_token_ids_tensor, all_per_token_weights_tensor
 
 
     def build_weighted_embedding_tensor(self, token_ids: torch.Tensor, per_token_weights: torch.Tensor) -> torch.Tensor:
         """
-        Build a tensor that embeds the passed-in token IDs and applyies the given per_token weights
-        :param token_ids: A tensor of shape `[self.max_length]` containing token IDs (ints)
-        :param per_token_weights: A tensor of shape `[self.max_length]` containing weights (floats)
-        :return: A tensor of shape `[1, self.max_length, token_dim]` representing the requested weighted embeddings
-        where `token_dim` is 768 for SD1 and 1280 for SD2.
+        Build a tensor that embeds the passed-in token IDs and applies the given per_token weights
+
+        :param token_ids: A tensor of shape `n*[self.max_length]` containing token IDs (ints) where n is some arbitrary
+            integer (i.e. n==1 for shorter prompts, or it may be >1 if there are more than max_length tokens in the original prompt)
+        :param per_token_weights: A tensor containing weights (floats), with the same shape as token_ids
+
+        :return: A tensor of shape `[1, token_ids.shape[0], token_dim]` representing the requested weighted embeddings
+            where `token_dim` is 768 for SD1 and 1280 for SD2.
         """
-        # print(f"building weighted embedding tensor for {tokens} with weights {per_token_weights}")
+        # print(f"building weighted embedding tensor for {tokens} with weights {token_weights}")
         if token_ids.shape != torch.Size([self.max_token_count]):
             raise ValueError(f"token_ids has shape {token_ids.shape} - expected [{self.max_token_count}]")
 

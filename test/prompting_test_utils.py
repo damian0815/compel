@@ -20,6 +20,11 @@ def make_dummy_embedding():
 class Object(object):
     pass
 
+
+class NullTransformer:
+    device = 'cpu'
+
+
 class DummyTransformer:
 
     def __init__(self, device="cpu"):

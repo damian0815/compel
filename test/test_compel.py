@@ -2,8 +2,9 @@ import unittest
 
 import torch
 
+from src.compel import EmbeddingsProvider
 from src.compel.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
-from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
+from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS, NullTransformer
 
 from src.compel.compel import Compel
 
@@ -27,7 +28,47 @@ def make_test_conditioning(text_encoder: DummyTransformer, tokenizer: DummyToken
     return conditioning
 
 
+class EmbeddingsProviderTestCase(unittest.TestCase):
+
+    def test_tokenizing(self):
+        tokenizer = DummyTokenizer(model_max_length=5)
+        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer())
+
+        prompts = ['a b']
+        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8])
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 5, 4], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor([1.0] + [0.8] * 2 + [1.0] * 2)))
+
+        prompts = ['a b c']
+        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8])
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]))))
+
+    def test_long_tokenizing(self):
+        tokenizer = DummyTokenizer(model_max_length=5)
+        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer())
+
+        prompts = ['a b c c b a a c b']
+        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8])
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5, 3, 2, 1, 0, 5, 3, 0, 2, 1, 5], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]) * 3)))
+
+        prompts = ['a b c c b a a c b a']
+        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8])
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5, 3, 2, 1, 0, 5, 3, 0, 2, 1, 5, 3, 0, 5, 4, 4], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]) * 3 + [1.0] + [0.8] + [1.0] * 3)))
+
+    def test_embeddings(self):
+        tokenizer = DummyTokenizer(model_max_length=5)
+        text_encoder = DummyTransformer()
+        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder)
+
+        prompts = ['a b']
+        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8])
+        embeddings_provider.build_weighted_embedding_tensor(token_ids_tensor, weights_tensor)
+
 class CompelTestCase(unittest.TestCase):
+
 
     def test_basic_prompt(self):
         tokenizer = DummyTokenizer()
