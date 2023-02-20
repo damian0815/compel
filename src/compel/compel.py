@@ -173,7 +173,7 @@ class Compel:
 
     def _get_tokens_length(self, texts: [str]) -> int:
         tokens = self.conditioning_provider.get_token_ids(texts, include_start_and_end_markers=False)
-        return sum([len[x] for x in tokens])
+        return sum([len(x) for x in tokens])
 
     def get_tokens(self, text: str) -> list[int]:
         return self.conditioning_provider.get_token_ids([text], include_start_and_end_markers=False)[0]
