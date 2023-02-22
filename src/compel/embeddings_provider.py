@@ -7,8 +7,10 @@ from transformers import CLIPTokenizer, CLIPTextModel
 
 __all__ = ["EmbeddingsProvider"]
 
+
 class BaseTextualInversionManager(ABC):
-    pass
+    def expand_textual_inversion_token_ids_if_necessary(self, token_ids: list[int]) -> list[int]:
+        raise NotImplementedError()
 
 
 class EmbeddingsProvider:
