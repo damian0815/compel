@@ -247,7 +247,7 @@ class EmbeddingsProvider:
                                        [self.tokenizer.eos_token_id] +
                                        [self.tokenizer.pad_token_id] * (self.max_token_count - 2),
                                        dtype=torch.int, device=z.device).unsqueeze(0)
-        empty_z = self.text_encoder(empty_token_ids).last_hidden_state
+        empty_z = self.text_encoder(empty_token_ids, return_dict=False)[0]
         batch_weights_expanded = per_token_weights.reshape(per_token_weights.shape + (1,)).expand(z.shape).to(z)
         z_delta_from_empty = z - empty_z
         weighted_z = empty_z + (z_delta_from_empty * batch_weights_expanded)
