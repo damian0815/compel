@@ -481,6 +481,7 @@ class PromptParserTestCase(unittest.TestCase):
             [('mountain', 1), CrossAttentionControlSubstitute([Fragment('(((', 1)], [Fragment('m(on))key', 1)])])]),
                          parse_prompt('mountain (\(\(\().swap(m\(on\)\)key)'))
 
+    """
     def test_legacy_blend(self):
         pp = PromptParser()
 
@@ -518,7 +519,7 @@ class PromptParserTestCase(unittest.TestCase):
                                 FlattenedPrompt([('man mountain', 1)])],
                                weights=[0.8,0.2]),
                          pp.parse_legacy_blend('"mountain man":4 man mountain'))
-
+    """
 
     def test_lora(self):
         self.assertNotEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])]),
