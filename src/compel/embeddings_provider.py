@@ -1,6 +1,6 @@
 import math
 from abc import ABC
-from typing import Callable
+from typing import Callable, Union
 
 import torch
 from transformers import CLIPTokenizer, CLIPTextModel
@@ -51,7 +51,7 @@ class EmbeddingsProvider:
                                                      fragment_weights_batch: list[list[float]],
                                                      should_return_tokens: bool = False,
                                                      device='cpu',
-                                 ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+                                 ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         """
 
         :param text_batch: A list of fragments of text to which different weights are to be applied.

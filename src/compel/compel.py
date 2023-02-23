@@ -79,7 +79,7 @@ class Compel:
         raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
 
     def _get_conditioning_for_flattened_prompt(self, prompt: FlattenedPrompt, should_return_tokens: bool=False
-                                               ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+                                               ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
         if type(prompt) is not FlattenedPrompt:
             raise ValueError(f"embeddings can only be made from FlattenedPrompts, got {type(prompt).__name__} instead")
         fragments = [x.text for x in prompt.children]
