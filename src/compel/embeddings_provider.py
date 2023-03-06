@@ -4,12 +4,13 @@ from typing import Callable, Union
 
 import torch
 from transformers import CLIPTokenizer, CLIPTextModel
+from typing import List, Tuple
 
 __all__ = ["EmbeddingsProvider"]
 
 
 class BaseTextualInversionManager(ABC):
-    def expand_textual_inversion_token_ids_if_necessary(self, token_ids: list[int]) -> list[int]:
+    def expand_textual_inversion_token_ids_if_necessary(self, token_ids: List[int]) -> List[int]:
         raise NotImplementedError()
 
 
@@ -35,7 +36,7 @@ class EmbeddingsProvider:
 
 
     @classmethod
-    def apply_embedding_weights(cls, embeddings: torch.Tensor, per_embedding_weights: list[float],
+    def apply_embedding_weights(cls, embeddings: torch.Tensor, per_embedding_weights: List[float],
                                 normalize: bool) -> torch.Tensor:
         per_embedding_weights = torch.tensor(per_embedding_weights, dtype=embeddings.dtype, device=embeddings.device)
         if normalize:
@@ -47,11 +48,11 @@ class EmbeddingsProvider:
         return blended_embeddings
 
     def get_embeddings_for_weighted_prompt_fragments(self,
-                                                     text_batch: list[list[str]],
-                                                     fragment_weights_batch: list[list[float]],
+                                                     text_batch: List[List[str]],
+                                                     fragment_weights_batch: List[List[float]],
                                                      should_return_tokens: bool = False,
                                                      device='cpu',
-                                 ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+                                 ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
 
         :param text_batch: A list of fragments of text to which different weights are to be applied.
@@ -136,7 +137,7 @@ class EmbeddingsProvider:
         else:
             return batch_z
 
-    def get_token_ids(self, texts: list[str], include_start_and_end_markers: bool = True) -> list[list[int]]:
+    def get_token_ids(self, texts: List[str], include_start_and_end_markers: bool = True) -> List[List[int]]:
         """
         Convert a list of strings like `["a cat", "a dog", "monkey riding a bicycle"]` into a list of lists of token
         ids like `[[bos, 0, 1, eos], [bos, 0, 2, eos], [bos, 3, 4, 0, 5, eos]]`. bos/eos markers are skipped if
@@ -176,7 +177,7 @@ class EmbeddingsProvider:
 
         return result
 
-    def get_token_ids_and_expand_weights(self, fragments: list[str], weights: list[float], device: str) -> (torch.Tensor, torch.Tensor):
+    def get_token_ids_and_expand_weights(self, fragments: List[str], weights: List[float], device: str) -> (torch.Tensor, torch.Tensor):
         '''
         Given a list of text fragments and corresponding weights: tokenize each fragment, append the token sequences
         together and return a padded token sequence starting with the bos marker, ending with the eos marker, and padded

@@ -1,6 +1,6 @@
 import string
 from dataclasses import dataclass
-from typing import Union, Optional, Any
+from typing import Union, Optional, Any, List, Tuple
 import re
 import pyparsing as pp
 
@@ -255,7 +255,7 @@ class Blend():
     weighted blend of the feature vectors to produce a single feature vector that is effectively a lerp between the
     Prompts.
     """
-    def __init__(self, prompts: list, weights: list[float], normalize_weights: bool=True):
+    def __init__(self, prompts: List, weights: List[List], normalize_weights: bool=True):
         #print("making Blend with prompts", prompts, "and weights", weights)
         weights = [1.0]*len(prompts) if (weights is None or len(weights)==0) else list(weights)
         if len(prompts) != len(weights):
@@ -331,7 +331,7 @@ class PromptParser():
         :return: A Conjunction containing the result of flattening each of the prompts in the passed-in root.
         """
 
-        def fuse_fragments(items) -> tuple[list, list]:
+        def fuse_fragments(items) -> Tuple[List, List]:
             # print("fusing fragments in ", items)
             fused_fragments = []
             extras = []
