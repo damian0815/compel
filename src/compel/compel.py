@@ -43,6 +43,18 @@ class Compel:
         conditioning, _ = self.build_conditioning_tensor_for_prompt_object(prompt_object)
         return conditioning
 
+    def __call__(self, text: Union[str, List[str]]) -> torch.Tensor:
+        if not isinstance(text, list):
+            text = [text]
+
+        cond_tensor = []
+        for text_input in text:
+            cond_tensor.append(self.build_conditioning_tensor(text))
+
+        cond_tensor = torch.cat(cond_tensor)
+
+        return cond_tensor
+
     @classmethod
     def parse_prompt_string(cls, prompt_string: str) -> Union[FlattenedPrompt, Blend]:
         pp = PromptParser()
