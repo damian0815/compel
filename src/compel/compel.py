@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Union, Optional, Callable
+from typing import Union, Optional, Callable, List
 
 import torch
 from transformers import CLIPTokenizer, CLIPTextModel
