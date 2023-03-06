@@ -1,12 +1,13 @@
 import torch
+from typing import List
 
 
 class Arguments:
     def __init__(self,
                  original_conditioning: torch.Tensor,
                  edited_conditioning: torch.Tensor,
-                 edit_opcodes: list[tuple],
-                 edit_options: list[dict]):
+                 edit_opcodes: List[tuple],
+                 edit_options: List[dict]):
         """
         Arguments for a cross-attention control implementation that substitutes `edited_conditioning` for `original_conditioning` while applying the
         attention maps from `original_conditioning`.

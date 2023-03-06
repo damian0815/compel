@@ -1,4 +1,5 @@
 import unittest
+from typing import List
 
 import torch
 
@@ -14,7 +15,7 @@ def make_dummy_compel():
     return Compel(tokenizer=tokenizer, text_encoder=text_encoder)
 
 
-def make_test_conditioning(text_encoder: DummyTransformer, tokenizer: DummyTokenizer, token_ids: list[int]) -> torch.Tensor:
+def make_test_conditioning(text_encoder: DummyTransformer, tokenizer: DummyTokenizer, token_ids: List[int]) -> torch.Tensor:
     pre_padding = [tokenizer.bos_token_id]
     token_ids = token_ids[0:tokenizer.model_max_length-2]
     post_padding = [tokenizer.eos_token_id] + [tokenizer.pad_token_id] * (tokenizer.model_max_length - len(token_ids) - 2)

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Union, Optional, Callable
+from typing import Union, Optional, Callable, List, Tuple
 
 import torch
 from transformers import CLIPTokenizer, CLIPTextModel
@@ -51,7 +51,7 @@ class Compel:
         parsed_prompt = conjunction.prompts[0]
         return parsed_prompt
 
-    def describe_tokenization(self, text: str) -> list[str]:
+    def describe_tokenization(self, text: str) -> List[str]:
         """
         For the given text, return a list of strings showing how it will be tokenized.
 
@@ -63,7 +63,7 @@ class Compel:
         return self.conditioning_provider.tokenizer.tokenize(text)
 
     def build_conditioning_tensor_for_prompt_object(self, prompt: Union[Blend, FlattenedPrompt],
-                                                    ) -> tuple[torch.Tensor, dict]:
+                                                    ) -> Tuple[torch.Tensor, dict]:
         """
 
         """
@@ -79,7 +79,7 @@ class Compel:
         raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
 
     def _get_conditioning_for_flattened_prompt(self, prompt: FlattenedPrompt, should_return_tokens: bool=False
-                                               ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+                                               ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         if type(prompt) is not FlattenedPrompt:
             raise ValueError(f"embeddings can only be made from FlattenedPrompts, got {type(prompt).__name__} instead")
         fragments = [x.text for x in prompt.children]
@@ -175,6 +175,6 @@ class Compel:
         tokens = self.conditioning_provider.get_token_ids(texts, include_start_and_end_markers=False)
         return sum([len(x) for x in tokens])
 
-    def get_tokens(self, text: str) -> list[int]:
+    def get_tokens(self, text: str) -> List[int]:
         return self.conditioning_provider.get_token_ids([text], include_start_and_end_markers=False)[0]
 
