@@ -43,13 +43,14 @@ class Compel:
         conditioning, _ = self.build_conditioning_tensor_for_prompt_object(prompt_object)
         return conditioning
 
+    @torch.no_grad()
     def __call__(self, text: Union[str, List[str]]) -> torch.Tensor:
         if not isinstance(text, list):
             text = [text]
 
         cond_tensor = []
         for text_input in text:
-            cond_tensor.append(self.build_conditioning_tensor(text))
+            cond_tensor.append(self.build_conditioning_tensor(text_input))
 
         cond_tensor = torch.cat(cond_tensor)
 
