@@ -1,5 +1,6 @@
 import string
-from typing import Union, Optional
+from dataclasses import dataclass
+from typing import Union, Optional, Any, List, Tuple
 import re
 import pyparsing as pp
 
@@ -29,14 +30,33 @@ class Prompt():
     to produce a FlattenedPrompt.
     """
     def __init__(self, parts: list):
-        for c in parts:
-            if type(c) is not Attention and not issubclass(type(c), BaseFragment) and type(c) is not pp.ParseResults:
-                raise PromptParser.ParsingException(f"Prompt cannot contain {type(c).__name__} ({c}), only {[c.__name__ for c in BaseFragment.__subclasses__()]} are allowed")
-        self.children = parts
+        self.children = []
+        for p in parts:
+            if (type(p) is LoraWeight
+                  or type(p) is Attention
+                  or issubclass(type(p), BaseFragment)
+                  or type(p) is pp.ParseResults):
+                self.children.append(p)
+            else:
+                raise PromptParser.ParsingException(
+                    f"Prompt cannot contain {type(p).__name__} ({p}), only "
+                    f"{[c.__name__ for c in BaseFragment.__subclasses__()]} are allowed"
+                )
+
     def __repr__(self):
         return f"Prompt:{self.children}"
+
     def __eq__(self, other):
-        return type(other) is Prompt and other.children == self.children
+        return (type(other) is Prompt
+                and other.children == self.children)
+
+@dataclass
+class LoraWeight:
+    model: str
+    weight: float
+
+    def __repr__(self):
+        return(f"Lora('{self.model}'@{self.weight})")
 
 class BaseFragment:
     pass
@@ -45,16 +65,21 @@ class FlattenedPrompt():
     """
     A Prompt that has been passed through flatten(). Its children can be readily tokenized.
     """
-    def __init__(self, parts: list=[]):
+    def __init__(self, parts: Optional[list] = None):
         self.children = []
-        for part in parts:
-            self.append(part)
+        self.lora_weights = []
+
+        if parts is not None:
+            for part in parts:
+                self.append(part)
 
     def append(self, fragment: Union[list, BaseFragment, tuple]):
         # verify type correctness
         if type(fragment) is list:
             for x in fragment:
                 self.append(x)
+        elif type(fragment) is LoraWeight:
+            self.lora_weights.append(fragment)
         elif issubclass(type(fragment), BaseFragment):
             self.children.append(fragment)
         elif type(fragment) is tuple:
@@ -81,7 +106,9 @@ class FlattenedPrompt():
     def __repr__(self):
         return f"FlattenedPrompt:{self.children}"
     def __eq__(self, other):
-        return type(other) is FlattenedPrompt and other.children == self.children
+        return (type(other) is FlattenedPrompt
+               and other.children == self.children
+                and other.lora_weights == self.lora_weights)
 
 
 class Fragment(BaseFragment):
@@ -197,7 +224,6 @@ class CrossAttentionControlAppend(CrossAttentionControlledFragment):
                and other.fragment == self.fragment
 
 
-
 class Conjunction():
     """
     Storage for one or more Prompts or Blends, each of which is to be separately diffused and then the results merged
@@ -216,7 +242,7 @@ class Conjunction():
         self.type = 'AND'
 
     def __repr__(self):
-        return f"Conjunction:{self.prompts} | weights {self.weights}"
+        return f"Conjunction:{self.prompts} | type {self.type} | weights {self.weights}"
     def __eq__(self, other):
         return type(other) is Conjunction \
                and other.prompts == self.prompts \
@@ -229,7 +255,7 @@ class Blend():
     weighted blend of the feature vectors to produce a single feature vector that is effectively a lerp between the
     Prompts.
     """
-    def __init__(self, prompts: list, weights: list[float], normalize_weights: bool=True):
+    def __init__(self, prompts: List, weights: List[List], normalize_weights: bool=True):
         #print("making Blend with prompts", prompts, "and weights", weights)
         weights = [1.0]*len(prompts) if (weights is None or len(weights)==0) else list(weights)
         if len(prompts) != len(weights):
@@ -275,34 +301,24 @@ class PromptParser():
         self.conjunction, self.prompt = build_parser_syntax(attention_plus_base, attention_minus_base)
 
 
-    def parse_conjunction(self, prompt: str) -> Conjunction:
+    def parse_conjunction(self, prompt: str, verbose: bool=False) -> Conjunction:
         '''
         :param prompt: The prompt string to parse
         :return: a Conjunction representing the parsed results.
         '''
-        #print(f"!!parsing '{prompt}'")
+        verbose and print(f"parsing '{prompt}'")
 
         if len(prompt.strip()) == 0:
             return Conjunction(prompts=[FlattenedPrompt([('', 1.0)])], weights=[1.0])
 
         root = self.conjunction.parse_string(prompt)
-        #print(f"'{prompt}' parsed to root", root)
+        verbose and print(f"'{prompt}' parsed to root", root)
         #fused = fuse_fragments(parts)
         #print("fused to", fused)
 
-        return self.flatten(root[0])
+        return self.flatten(root[0], verbose=verbose)
 
-    def parse_legacy_blend(self, text: str, skip_normalize: bool=False) -> Optional[Blend]:
-        weighted_subprompts = split_weighted_subprompts(text, skip_normalize=skip_normalize)
-        if len(weighted_subprompts) <= 1:
-            return None
-        strings = [x[0] for x in weighted_subprompts]
-        weights = [x[1] for x in weighted_subprompts]
 
-        parsed_conjunctions = [self.parse_conjunction(x) for x in strings]
-        flattened_prompts = [x.prompts[0] for x in parsed_conjunctions]
-
-        return Blend(prompts=flattened_prompts, weights=weights, normalize_weights=not skip_normalize)
 
 
     def flatten(self, root: Conjunction, verbose = False) -> Conjunction:
@@ -315,26 +331,29 @@ class PromptParser():
         :return: A Conjunction containing the result of flattening each of the prompts in the passed-in root.
         """
 
-        def fuse_fragments(items):
+        def fuse_fragments(items) -> Tuple[List, List]:
             # print("fusing fragments in ", items)
-            result = []
+            fused_fragments = []
+            extras = []
             for x in items:
                 if type(x) is CrossAttentionControlSubstitute:
-                    original_fused = fuse_fragments(x.original)
-                    edited_fused = fuse_fragments(x.edited)
-                    result.append(CrossAttentionControlSubstitute(original_fused, edited_fused, options=x.options))
+                    original_fused, _ = fuse_fragments(x.original)
+                    edited_fused, _ = fuse_fragments(x.edited)
+                    fused_fragments.append(CrossAttentionControlSubstitute(original_fused, edited_fused, options=x.options))
+                elif type(x) is LoraWeight:
+                    extras.append(x)
                 else:
-                    last_weight = result[-1].weight \
-                        if (len(result) > 0 and not issubclass(type(result[-1]), CrossAttentionControlledFragment)) \
+                    last_weight = fused_fragments[-1].weight \
+                        if (len(fused_fragments) > 0 and not issubclass(type(fused_fragments[-1]), CrossAttentionControlledFragment)) \
                         else None
                     this_text = x.text
                     this_weight = x.weight
                     if last_weight is not None and last_weight == this_weight:
-                        last_text = result[-1].text
-                        result[-1] = Fragment(last_text + ' ' + this_text, last_weight)
+                        last_text = fused_fragments[-1].text
+                        fused_fragments[-1] = Fragment(last_text + ' ' + this_text, last_weight)
                     else:
-                        result.append(x)
-            return result
+                        fused_fragments.append(x)
+            return fused_fragments, extras
 
         def flatten_internal(node, weight_scale, results, prefix):
             verbose and print(prefix + "flattening", node, "...")
@@ -347,6 +366,8 @@ class PromptParser():
                 # todo: inject a blend when flattening attention with weight <1"
                 for index,c in enumerate(node.children):
                     results = flatten_internal(c, weight_scale * node.weight, results, prefix + f" att{index} ")
+            elif type(node) is LoraWeight:
+                results.append(node)
             elif type(node) is Fragment:
                 results += [Fragment(node.text, node.weight*weight_scale)]
             elif type(node) is CrossAttentionControlSubstitute:
@@ -361,12 +382,13 @@ class PromptParser():
                     flattened_subprompts = flatten_internal(prompt, weight_scale, flattened_subprompts, prefix+'B ')
                 results += [Blend(prompts=flattened_subprompts, weights=node.weights, normalize_weights=node.normalize_weights)]
             elif type(node) is Prompt:
-                #print(prefix + "about to flatten Prompt with children", node.children)
+                verbose and print(prefix + "about to flatten Prompt with children", node.children)
                 flattened_prompt = []
                 for child in node.children:
                     flattened_prompt = flatten_internal(child, weight_scale, flattened_prompt, prefix+'P ')
-                results += [FlattenedPrompt(parts=fuse_fragments(flattened_prompt))]
-                #print(prefix + "after flattening Prompt, results is", results)
+                fused_fragments, extras = fuse_fragments(flattened_prompt)
+                results += [FlattenedPrompt(parts=fused_fragments + extras)]
+                verbose and print(prefix + "after flattening Prompt, results is", results)
             else:
                 raise PromptParser.ParsingException(f"unhandled node type {type(node)} when flattening {node}")
             verbose and print(prefix + "-> after flattening", type(node).__name__, "results is", results)
@@ -571,10 +593,14 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
     cross_attention_substitute.set_debug(False)
     cross_attention_substitute.set_parse_action(make_operator_object)
 
+    lora_weight = "withLora" + lparen + keyword + pp.Optional(comma + number) + rparen
+    lora_weight.set_name('lora_weight')
+    lora_weight.set_parse_action(lambda x: LoraWeight(model=x[1], weight=x[2]))
 
     # an entire self-contained prompt, which can be used in a Blend or Conjunction
     prompt = pp.ZeroOrMore(pp.MatchFirst([
         cross_attention_substitute,
+        lora_weight,
         attention,
         quoted_fragment,
         parenthesized_fragment,
@@ -619,40 +645,4 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
     conjunction = (explicit_conjunction | implicit_conjunction)
 
     return conjunction, prompt
-
-
-def split_weighted_subprompts(text, skip_normalize=False)->list:
-    """
-    Legacy blend parsing.
-
-    grabs all text up to the first occurrence of ':'
-    uses the grabbed text as a sub-prompt, and takes the value following ':' as weight
-    if ':' has no value defined, defaults to 1.0
-    repeats until no text remaining
-    """
-    prompt_parser = re.compile("""
-            (?P<prompt>     # capture group for 'prompt'
-            (?:\\\:|[^:])+  # match one or more non ':' characters or escaped colons '\:'
-            )               # end 'prompt'
-            (?:             # non-capture group
-            :+              # match one or more ':' characters
-            (?P<weight>     # capture group for 'weight'
-            -?\d+(?:\.\d+)? # match positive or negative integer or decimal number
-            )?              # end weight capture group, make optional
-            \s*             # strip spaces after weight
-            |               # OR
-            $               # else, if no ':' then match end of line
-            )               # end non-capture group
-            """, re.VERBOSE)
-    parsed_prompts = [(match.group("prompt").replace("\\:", ":"), float(
-        match.group("weight") or 1)) for match in re.finditer(prompt_parser, text)]
-    if skip_normalize:
-        return parsed_prompts
-    weight_sum = sum(map(lambda x: x[1], parsed_prompts))
-    if weight_sum == 0:
-        print(
-            "* Warning: Subprompt weights add up to zero. Discarding and using even weights instead.")
-        equal_weight = 1 / max(len(parsed_prompts), 1)
-        return [(x[0], equal_weight) for x in parsed_prompts]
-    return [(x[0], x[1] / weight_sum) for x in parsed_prompts]
 

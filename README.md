@@ -35,7 +35,27 @@ prompt = "a cat playing with a ball++ in the forest"
 conditioning = compel.build_conditioning_tensor(prompt)
 
 # generate image
-image = pipeline(prompt_embeds=conditioning, num_inference_steps=20).images[0]
+images = pipeline(prompt_embeds=conditioning, num_inference_steps=20).images
+images[0].save("image.jpg")
+```
+
+For batched input, use `torch.cat` to merge multiple conditioning tensors into one:
+
+```python
+import torch
+
+from diffusers import StableDiffusionPipeline
+from compel import Compel
+
+pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
+compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
+
+prompts = ["a cat playing with a ball++ in the forest", "a dog playing with a ball in the forest"]
+prompt_embeds = torch.cat([compel.build_conditioning_tensor(prompt) for prompt in prompts])
+images = pipeline(prompt_embeds=prompt_embeds).images
+
+images[0].save("image0.jpg")
+images[1].save("image1.jpg")
 ```
 
 
