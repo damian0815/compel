@@ -36,12 +36,12 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer())
 
         prompts = ['a b']
-        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8])
+        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
         self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 5, 4], dtype=torch.int64)))
         self.assertTrue(torch.equal(weights_tensor, torch.tensor([1.0] + [0.8] * 2 + [1.0] * 2)))
 
         prompts = ['a b c']
-        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8])
+        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
         self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5], dtype=torch.int64)))
         self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]))))
 
@@ -50,12 +50,12 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer())
 
         prompts = ['a b c c b a a c b']
-        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8])
+        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
         self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5, 3, 2, 1, 0, 5, 3, 0, 2, 1, 5], dtype=torch.int64)))
         self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]) * 3)))
 
         prompts = ['a b c c b a a c b a']
-        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8])
+        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
         self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5, 3, 2, 1, 0, 5, 3, 0, 2, 1, 5, 3, 0, 5, 4, 4], dtype=torch.int64)))
         self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]) * 3 + [1.0] + [0.8] + [1.0] * 3)))
 
@@ -65,7 +65,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder)
 
         prompts = ['a b']
-        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8])
+        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
         embeddings_provider.build_weighted_embedding_tensor(token_ids_tensor, weights_tensor)
 
 class CompelTestCase(unittest.TestCase):

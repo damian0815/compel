@@ -1,10 +1,9 @@
 import math
 from abc import ABC
-from typing import Callable, Union
+from typing import Callable, Union, Tuple, List
 
 import torch
 from transformers import CLIPTokenizer, CLIPTextModel
-from typing import List, Tuple
 
 __all__ = ["EmbeddingsProvider"]
 
@@ -194,8 +193,8 @@ class EmbeddingsProvider:
             fragments = ['']
             weights = [1.0]
         per_fragment_token_ids = self.get_token_ids(fragments, include_start_and_end_markers=False)
-        all_token_ids: list[int] = []
-        all_token_weights: list[float] = []
+        all_token_ids: List[int] = []
+        all_token_weights: List[float] = []
         #print("all fragments:", fragments, weights)
         for this_fragment_token_ids, weight in zip(per_fragment_token_ids, weights):
             # append
@@ -203,9 +202,9 @@ class EmbeddingsProvider:
             # fill out weights tensor with one float per token
             all_token_weights += [float(weight)] * len(this_fragment_token_ids)
 
-        return self._chunk_and_pad_token_ids(all_token_ids, all_token_weights)
+        return self._chunk_and_pad_token_ids(all_token_ids, all_token_weights, device=device)
 
-    def _chunk_and_pad_token_ids(self, token_ids: List[int], token_weights: List[float]
+    def _chunk_and_pad_token_ids(self, token_ids: List[int], token_weights: List[float], device: str
                                  ) -> Tuple[torch.Tensor, torch.Tensor]:
 
         remaining_token_ids = token_ids
@@ -214,7 +213,7 @@ class EmbeddingsProvider:
 
         all_token_ids = []
         all_token_weights = []
-        while remaining_token_ids:
+        while len(all_token_ids) == 0 or len(remaining_token_ids) > 0:
             # each chunk must leave room for bos/eos
             chunk_token_ids = remaining_token_ids[0:chunk_length_without_eos_bos_markers]
             chunk_token_weights = remaining_token_weights[0:chunk_length_without_eos_bos_markers]
@@ -235,8 +234,8 @@ class EmbeddingsProvider:
 
         all_token_ids_tensor = torch.tensor(all_token_ids, dtype=torch.long, device=device)
         all_per_token_weights_tensor = torch.tensor(all_token_weights,
-                                                    dtype=self.get_dtypoe_for_device(self.text_encoder.device),
-                                                    device=self.device)
+                                                    dtype=self.get_dtype_for_device(self.text_encoder.device),
+                                                    device=device)
         #print(f"assembled all_token_ids_tensor with shape {all_token_ids_tensor.shape}")
         return all_token_ids_tensor, all_per_token_weights_tensor
 
@@ -253,8 +252,8 @@ class EmbeddingsProvider:
             where `token_dim` is 768 for SD1 and 1280 for SD2.
         """
         # print(f"building weighted embedding tensor for {tokens} with weights {token_weights}")
-        if token_ids.shape != torch.Size([self.max_token_count]):
-            raise ValueError(f"token_ids has shape {token_ids.shape} - expected [{self.max_token_count}]")
+        if token_ids.shape[0] % self.max_token_count != 0:
+            raise ValueError(f"token_ids has shape {token_ids.shape} - expected a multiple of {self.max_token_count}")
 
         z = self.text_encoder(token_ids.unsqueeze(0), return_dict=False)[0]
         empty_token_ids = torch.tensor([self.tokenizer.bos_token_id] +
@@ -262,6 +261,10 @@ class EmbeddingsProvider:
                                        [self.tokenizer.pad_token_id] * (self.max_token_count - 2),
                                        dtype=torch.int, device=z.device).unsqueeze(0)
         empty_z = self.text_encoder(empty_token_ids, return_dict=False)[0]
+        # if "long prompts" is enabled, we need to repeatedly append empty_z to match the length of z
+        repeat_count = z.shape[1] // self.max_token_count
+        empty_z = torch.cat([empty_z] * repeat_count, dim=1)
+
         batch_weights_expanded = per_token_weights.reshape(per_token_weights.shape + (1,)).expand(z.shape).to(z)
         z_delta_from_empty = z - empty_z
         weighted_z = empty_z + (z_delta_from_empty * batch_weights_expanded)
