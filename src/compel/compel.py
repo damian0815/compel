@@ -21,11 +21,13 @@ class Compel:
                  tokenizer: CLIPTokenizer,
                  text_encoder: CLIPTextModel,
                  textual_inversion_manager: Optional[BaseTextualInversionManager] = None,
-                 dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32):
+                 dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
+                 truncate_long_prompts: bool=True):
         self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
                                                         text_encoder=text_encoder,
                                                         textual_inversion_manager=textual_inversion_manager,
-                                                        dtype_for_device_getter=dtype_for_device_getter
+                                                        dtype_for_device_getter=dtype_for_device_getter,
+                                                        truncate=truncate_long_prompts
                                                         )
 
     @property
@@ -35,6 +37,7 @@ class Compel:
     def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str='') -> ConditioningScheduler:
         positive_conditioning = self.build_conditioning_tensor(positive_prompt)
         negative_conditioning = self.build_conditioning_tensor(negative_prompt)
+        positive_conditioning, negative_conditioning = self.pad_conditioning_tensors_to_same_length(positive_conditioning, negative_conditioning)
         return StaticConditioningScheduler(positive_conditioning=positive_conditioning,
                                            negative_conditioning=negative_conditioning)
 
@@ -90,6 +93,26 @@ class Compel:
                 return self._get_conditioning_for_flattened_prompt(prompt), {}
 
         raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
+
+    def pad_conditioning_tensors_to_same_length(self, c0: torch.Tensor, c1: torch.Tensor
+                                                ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        If `truncate_long_prompts` was set to False on initialization, conditioning tensors do not have a fixed length.
+        This is a problem when using a negative and a positive prompt to condition the diffusion process. This function
+        pads either c0 or c1 if necessary to ensure they both have the same length, returning the padded c0 and c1.
+        """
+        if c0.shape == c1.shape:
+            return c0, c1
+
+        max_conditioning_tensor_length = max(c0.shape[1], c1.shape[1])
+        # pad out with an emptystring tensor
+        empty_z = self.build_conditioning_tensor("")
+        while c0.shape[1] < max_conditioning_tensor_length:
+            c0 = torch.cat([c0, empty_z], dim=1)
+        while c1.shape[1] < max_conditioning_tensor_length:
+            c1 = torch.cat([c1, empty_z], dim=1)
+        return c0, c1
+
 
     def _get_conditioning_for_flattened_prompt(self, prompt: FlattenedPrompt, should_return_tokens: bool=False
                                                ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:

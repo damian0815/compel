@@ -268,18 +268,31 @@ class EmbeddingsProvider:
         if token_ids.shape[0] % self.max_token_count != 0:
             raise ValueError(f"token_ids has shape {token_ids.shape} - expected a multiple of {self.max_token_count}")
 
-        z = self.text_encoder(token_ids.unsqueeze(0), return_dict=False)[0]
+        chunk_start_index = 0
         empty_token_ids = torch.tensor([self.tokenizer.bos_token_id] +
                                        [self.tokenizer.eos_token_id] +
                                        [self.tokenizer.pad_token_id] * (self.max_token_count - 2),
-                                       dtype=torch.int, device=z.device).unsqueeze(0)
+                                       dtype=torch.int, device=self.text_encoder.device).unsqueeze(0)
         empty_z = self.text_encoder(empty_token_ids, return_dict=False)[0]
-        # if "long prompts" is enabled, we need to repeatedly append empty_z to match the length of z
-        repeat_count = z.shape[1] // self.max_token_count
-        empty_z = torch.cat([empty_z] * repeat_count, dim=1)
+        weighted_z = None
 
-        batch_weights_expanded = per_token_weights.reshape(per_token_weights.shape + (1,)).expand(z.shape).to(z)
-        z_delta_from_empty = z - empty_z
-        weighted_z = empty_z + (z_delta_from_empty * batch_weights_expanded)
+        chunk_size = self.max_token_count
+        while chunk_start_index < token_ids.shape[0]:
+            next_chunk_start_index = chunk_start_index+chunk_size
+            chunk_token_ids = token_ids[chunk_start_index:next_chunk_start_index]
+            chunk_per_token_weights = per_token_weights[chunk_start_index:next_chunk_start_index]
+
+            z = self.text_encoder(chunk_token_ids.unsqueeze(0), return_dict=False)[0]
+            batch_weights_expanded = chunk_per_token_weights.reshape(
+                chunk_per_token_weights.shape + (1,)).expand(z.shape).to(z)
+
+            z_delta_from_empty = z - empty_z
+            this_weighted_z = empty_z + (z_delta_from_empty * batch_weights_expanded)
+            weighted_z = (
+                this_weighted_z
+                if weighted_z is None
+                else torch.cat([weighted_z, this_weighted_z], dim=1)
+            )
+            chunk_start_index += chunk_size
 
         return weighted_z

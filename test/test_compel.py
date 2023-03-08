@@ -1,5 +1,5 @@
 import unittest
-from typing import List
+from typing import List, Optional
 
 import torch
 
@@ -16,16 +16,44 @@ def make_dummy_compel():
     return Compel(tokenizer=tokenizer, text_encoder=text_encoder)
 
 
-def make_test_conditioning(text_encoder: DummyTransformer, tokenizer: DummyTokenizer, token_ids: List[int]) -> torch.Tensor:
-    pre_padding = [tokenizer.bos_token_id]
-    token_ids = token_ids[0:tokenizer.model_max_length-2]
-    post_padding = [tokenizer.eos_token_id] + [tokenizer.pad_token_id] * (tokenizer.model_max_length - len(token_ids) - 2)
-    token_ids = pre_padding + token_ids + post_padding
-    assert len(token_ids) == tokenizer.model_max_length
-    conditioning =  text_encoder(input_ids=torch.tensor(token_ids,
-                                                        dtype=torch.int,
-                                                        device=text_encoder.device
-                                                        ).unsqueeze(0)).last_hidden_state
+def make_test_conditioning(text_encoder: DummyTransformer,
+                           tokenizer: DummyTokenizer,
+                           token_ids: List[int],
+                           truncate: bool=True,
+                           pad_to_length: Optional[int]=None,
+                           ) -> torch.Tensor:
+    remaining_tokens = token_ids.copy()
+    conditioning = None
+    chunk_length = tokenizer.model_max_length-2
+    while True:
+        pre_padding = [tokenizer.bos_token_id]
+        chunk_token_ids = remaining_tokens[0:chunk_length]
+        remaining_tokens = remaining_tokens[chunk_length:]
+        post_padding = [tokenizer.eos_token_id] + \
+                       [tokenizer.pad_token_id] * (tokenizer.model_max_length - len(chunk_token_ids) - 2)
+        chunk_token_ids = pre_padding + chunk_token_ids + post_padding
+        assert len(chunk_token_ids) == tokenizer.model_max_length
+        this_conditioning = text_encoder(input_ids=torch.tensor(chunk_token_ids,
+                                                            dtype=torch.int,
+                                                            device=text_encoder.device
+                                                            ).unsqueeze(0)).last_hidden_state
+        conditioning = (
+            this_conditioning
+            if conditioning is None
+            else torch.cat([conditioning, this_conditioning], dim=1)
+        )
+        if truncate or len(remaining_tokens) == 0:
+            break
+
+    if pad_to_length is not None:
+        empty_token_ids = [tokenizer.bos_token_id] + [tokenizer.eos_token_id] + [tokenizer.pad_token_id] * (tokenizer.model_max_length-2)
+        empty_conditioning = text_encoder(input_ids=torch.tensor(empty_token_ids,
+                                            dtype=torch.int,
+                                            device=text_encoder.device
+                                            ).unsqueeze(0)).last_hidden_state
+        while pad_to_length > conditioning.shape[1]:
+            conditioning = torch.cat([conditioning, empty_conditioning], dim=1)
+
     return conditioning
 
 
@@ -47,7 +75,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
 
     def test_long_tokenizing(self):
         tokenizer = DummyTokenizer(model_max_length=5)
-        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer())
+        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer(), truncate=False)
 
         prompts = ['a b c c b a a c b']
         token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
@@ -103,16 +131,36 @@ class CompelTestCase(unittest.TestCase):
                                                          expected_positive_conditioning,
                                                          expected_negative_conditioning)
 
-    def test_too_long_prompt(self):
+    def test_too_long_prompt_truncate(self):
         tokenizer = DummyTokenizer()
         text_encoder = DummyTransformer()
         compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
 
-        # positive "a b c" negative "c b a" makes it to the Conditioning intact for t=0, t=0.5, t=1
         positive_prompt = " ".join(KNOWN_WORDS[:3] * 40)
         conditioning_scheduler = compel.make_conditioning_scheduler(positive_prompt)
         expected_positive_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3] * 40)
         expected_negative_conditioning = make_test_conditioning(text_encoder, tokenizer, [])
+        self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
+                                                         expected_positive_conditioning,
+                                                         expected_negative_conditioning)
+
+
+    def test_too_long_prompt_notruncate(self):
+        tokenizer = DummyTokenizer(model_max_length=10)
+        text_encoder = DummyTransformer()
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
+
+        positive_prompt = " ".join(KNOWN_WORDS[:3] * 4)
+        conditioning_scheduler = compel.make_conditioning_scheduler(positive_prompt)
+        expected_positive_conditioning = make_test_conditioning(text_encoder,
+                                                                tokenizer,
+                                                                KNOWN_WORDS_TOKEN_IDS[:3] * 4,
+                                                                truncate=False)
+        expected_negative_conditioning = make_test_conditioning(text_encoder,
+                                                                tokenizer, [],
+                                                                pad_to_length=expected_positive_conditioning.shape[1],
+                                                                truncate=False)
+
         self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
                                                          expected_positive_conditioning,
                                                          expected_negative_conditioning)
