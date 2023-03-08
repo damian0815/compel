@@ -255,7 +255,7 @@ class Blend():
     weighted blend of the feature vectors to produce a single feature vector that is effectively a lerp between the
     Prompts.
     """
-    def __init__(self, prompts: List, weights: List[List], normalize_weights: bool=True):
+    def __init__(self, prompts: List, weights: List[float], normalize_weights: bool=True):
         #print("making Blend with prompts", prompts, "and weights", weights)
         weights = [1.0]*len(prompts) if (weights is None or len(weights)==0) else list(weights)
         if len(prompts) != len(weights):

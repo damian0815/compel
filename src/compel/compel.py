@@ -37,7 +37,9 @@ class Compel:
     def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str='') -> ConditioningScheduler:
         positive_conditioning = self.build_conditioning_tensor(positive_prompt)
         negative_conditioning = self.build_conditioning_tensor(negative_prompt)
-        positive_conditioning, negative_conditioning = self.pad_conditioning_tensors_to_same_length(positive_conditioning, negative_conditioning)
+        [positive_conditioning, negative_conditioning] = self.pad_conditioning_tensors_to_same_length(
+            [positive_conditioning, negative_conditioning]
+        )
         return StaticConditioningScheduler(positive_conditioning=positive_conditioning,
                                            negative_conditioning=negative_conditioning)
 
@@ -94,24 +96,21 @@ class Compel:
 
         raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
 
-    def pad_conditioning_tensors_to_same_length(self, c0: torch.Tensor, c1: torch.Tensor
+    def pad_conditioning_tensors_to_same_length(self, conditionings: List[torch.Tensor],
                                                 ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         If `truncate_long_prompts` was set to False on initialization, conditioning tensors do not have a fixed length.
         This is a problem when using a negative and a positive prompt to condition the diffusion process. This function
         pads either c0 or c1 if necessary to ensure they both have the same length, returning the padded c0 and c1.
         """
-        if c0.shape == c1.shape:
-            return c0, c1
-
-        max_conditioning_tensor_length = max(c0.shape[1], c1.shape[1])
-        # pad out with an emptystring tensor
+        max_conditioning_tensor_length = max([c.shape[1] for c in conditionings])
+        # if necessary, pad shorter tensors out with an emptystring tensor
         empty_z = self.build_conditioning_tensor("")
-        while c0.shape[1] < max_conditioning_tensor_length:
-            c0 = torch.cat([c0, empty_z], dim=1)
-        while c1.shape[1] < max_conditioning_tensor_length:
-            c1 = torch.cat([c1, empty_z], dim=1)
-        return c0, c1
+        for i, c in enumerate(conditionings):
+            while c.shape[1] < max_conditioning_tensor_length:
+                c = torch.cat([c, empty_z], dim=1)
+            conditionings[i] = c
+        return conditionings
 
 
     def _get_conditioning_for_flattened_prompt(self, prompt: FlattenedPrompt, should_return_tokens: bool=False
@@ -128,12 +127,13 @@ class Compel:
             return conditioning
 
     def _get_conditioning_for_blend(self, blend: Blend):
-        conditionings_to_blend = None
+        conditionings_to_blend = []
         for i, flattened_prompt in enumerate(blend.prompts):
             this_conditioning = self._get_conditioning_for_flattened_prompt(flattened_prompt)
-            conditionings_to_blend = this_conditioning if conditionings_to_blend is None else torch.cat(
-                (conditionings_to_blend, this_conditioning))
-        conditioning = EmbeddingsProvider.apply_embedding_weights(conditionings_to_blend.unsqueeze(0),
+            conditionings_to_blend.append(this_conditioning)
+        conditionings_to_blend = self.pad_conditioning_tensors_to_same_length(conditionings_to_blend)
+        conditionings_to_blend_tensor = torch.cat(conditionings_to_blend).unsqueeze(0)
+        conditioning = EmbeddingsProvider.apply_embedding_weights(conditionings_to_blend_tensor,
                                                                   blend.weights,
                                                                   normalize=blend.normalize_weights)
         return conditioning
@@ -197,8 +197,8 @@ class Compel:
         edited_embeddings, edited_tokens = self._get_conditioning_for_flattened_prompt(
             edited_prompt, should_return_tokens=True
         )
-        original_conditioning = original_embeddings
-        edited_conditioning = edited_embeddings
+        [original_conditioning, edited_conditioning] = self.pad_conditioning_tensors_to_same_length(
+            [original_embeddings, edited_embeddings])
         cac_args = cross_attention_control.Arguments(
             original_conditioning=original_conditioning,
             edited_conditioning=edited_conditioning,
