@@ -16,14 +16,24 @@ class BaseTextualInversionManager(ABC):
 class EmbeddingsProvider:
 
     def __init__(self,
-                tokenizer: CLIPTokenizer, # converts strings to lists of int token ids
-                text_encoder: CLIPTextModel, # convert a list of int token ids to a tensor of embeddings
+                tokenizer: CLIPTokenizer,
+                text_encoder: CLIPTextModel,
                 textual_inversion_manager: BaseTextualInversionManager = None,
                 dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
+                truncate: bool = True
                 ):
+        """
+        `tokenizer`: converts strings to lists of int token ids
+        `text_encoder`: convert lists of token ids to embedding tensors
+        `textual_inversion_manager`: manage token insertion for textual inversions with vector length >1
+        `dtype_for_device_getter`: callback that returns an appropriate dtype for the requested device. if unset, defaults to torch.float32.
+        `truncate`: if True, truncate inputs to the maximum length specified by the tokenizer. if False, returns
+                    tensors that may be longer than the maximum length (but will always be an integer multiple of maximum length)
+        """
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
         self.textual_inversion_manager = textual_inversion_manager
+        self.truncate_to_model_max_length = truncate
 
         # by default always use float32
         self.get_dtype_for_device = dtype_for_device_getter
@@ -213,7 +223,7 @@ class EmbeddingsProvider:
 
         all_token_ids = []
         all_token_weights = []
-        while len(all_token_ids) == 0 or len(remaining_token_ids) > 0:
+        while True:
             # each chunk must leave room for bos/eos
             chunk_token_ids = remaining_token_ids[0:chunk_length_without_eos_bos_markers]
             chunk_token_weights = remaining_token_weights[0:chunk_length_without_eos_bos_markers]
@@ -231,6 +241,9 @@ class EmbeddingsProvider:
 
             all_token_ids += chunk_token_ids
             all_token_weights += chunk_token_weights
+
+            if self.truncate_to_model_max_length or len(remaining_token_ids) == 0:
+                break
 
         all_token_ids_tensor = torch.tensor(all_token_ids, dtype=torch.long, device=device)
         all_per_token_weights_tensor = torch.tensor(all_token_weights,

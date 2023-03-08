@@ -6,10 +6,10 @@ import torch
 from src.compel.embeddings_provider import EmbeddingsProvider
 from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
-def make_dummy_embeddings_provider(max_length=10) -> EmbeddingsProvider:
+def make_dummy_embeddings_provider(max_length=10, truncate=True) -> EmbeddingsProvider:
     tokenizer = DummyTokenizer(max_length)
     text_encoder = DummyTransformer()
-    return EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder)
+    return EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder, truncate=truncate)
 
 
 class EmbeddingsProviderTestCase(unittest.TestCase):
@@ -117,9 +117,9 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
 
 
-    def test_too_long_weighted_prompt_fragments(self):
+    def test_too_long_weighted_prompt_fragments_truncate(self):
         max_length = 10
-        ep = make_dummy_embeddings_provider(max_length=max_length)
+        ep = make_dummy_embeddings_provider(max_length=max_length, truncate=True)
 
 
         # too many weighted fragments
@@ -133,6 +133,30 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
                                           [KNOWN_WORDS_TOKEN_IDS[1]])[0:8] +
                                           [ep.tokenizer.eos_token_id])
         expected_weights = [1] + [1] + [2, 2, 2, 2, 2, 2, 2] + [1]
+        expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor(expected_weights))
+        self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
+
+    def test_too_long_weighted_prompt_fragments_notruncate(self):
+        max_length = 10
+        ep = make_dummy_embeddings_provider(max_length=max_length, truncate=False)
+
+        # too many weighted fragments
+        text_batch = [[KNOWN_WORDS[0], ' '.join(reversed(KNOWN_WORDS*3)), ' '.join(KNOWN_WORDS[1:3], )]]
+        fragment_weights_batch = [[1, 2, 3]]
+        embeddings = ep.get_embeddings_for_weighted_prompt_fragments(text_batch, fragment_weights_batch)
+
+        expected_token_ids_part1 = ([ep.tokenizer.bos_token_id] +
+                                          [KNOWN_WORDS_TOKEN_IDS[0]] +
+                                          list(reversed(KNOWN_WORDS_TOKEN_IDS*3))[0:7] +
+                                          [ep.tokenizer.eos_token_id])
+        expected_token_ids_part2 = ([ep.tokenizer.bos_token_id] +
+                                          list(reversed(KNOWN_WORDS_TOKEN_IDS*3))[7:9] +
+                                          KNOWN_WORDS_TOKEN_IDS[1:3] +
+                                          [ep.tokenizer.eos_token_id] +
+                                          ([ep.tokenizer.pad_token_id] * 4))
+        expected_token_ids = torch.tensor(expected_token_ids_part1 + expected_token_ids_part2)
+        expected_weights = ([1] + [1] + [2, 2, 2, 2, 2, 2, 2] + [1] +
+                            [1] + [2, 2] + [3, 3] + [1] + ([1] * 4))
         expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor(expected_weights))
         self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
 
