@@ -58,4 +58,25 @@ images[0].save("image0.jpg")
 images[1].save("image1.jpg")
 ```
 
+## Changelog
+ 
+
+### 0.1.9 - add support for prompts longer than the model's max token length. 
+
+To enable, initialize `Compel` with `truncate_long_prompts=False` (default is True). Prompts that are longer than the model's `max_token_length` will be chunked and padded out to an integer multiple of `max_token_length`. 
+
+If you're working with a negative prompt, you will probably need to use `compel.pad_conditioning_tensors_to_same_length()` to avoid having the model complain about mismatched conditioning tensor lengths:
+
+```python
+compel = Compel(..., truncate_long_prompts=False)
+prompt = "a cat playing with a ball++ in the forest, amazing, exquisite, stunning, masterpiece, skilled, powerful, incredible, amazing, trending on gregstation, greg, greggy, greggs greggson, greggy mcgregface, ..." # very long prompt
+negative_prompt = "dog, football, rainforest" # short prompt
+conditioning = compel.build_conditioning_tensor(prompt)
+negative_conditioning = compel.build_conditioning_tensor(negative_prompt)
+[conditioning, negative_conditioning] = compel.pad_conditioning_tensors_to_same_length([conditioning, negative_conditioning])
+```
+
+### 0.1.8 - downgrade Python min version to 3.7
+
+### 0.1.7 - InvokeAI compatibility
 
