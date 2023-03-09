@@ -97,7 +97,7 @@ class Compel:
         raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
 
     def pad_conditioning_tensors_to_same_length(self, conditionings: List[torch.Tensor],
-                                                ) -> Tuple[torch.Tensor, torch.Tensor]:
+                                                ) -> List[torch.Tensor]:
         """
         If `truncate_long_prompts` was set to False on initialization, conditioning tensors do not have a fixed length.
         This is a problem when using a negative and a positive prompt to condition the diffusion process. This function
