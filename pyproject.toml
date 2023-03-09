@@ -1,6 +1,6 @@
 [project]
 name = "compel"
-version = "0.1.9"
+version = "0.1.10"
 authors = [
   { name="Damian Stewart", email="null@damianstewart.com" },
 ]
