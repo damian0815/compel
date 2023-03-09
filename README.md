@@ -59,9 +59,8 @@ images[1].save("image1.jpg")
 ```
 
 ## Changelog
- 
 
-### 0.1.9 - add support for prompts longer than the model's max token length. 
+### 0.1.10 - add support for prompts longer than the model's max token length. 
 
 To enable, initialize `Compel` with `truncate_long_prompts=False` (default is True). Prompts that are longer than the model's `max_token_length` will be chunked and padded out to an integer multiple of `max_token_length`. 
 
