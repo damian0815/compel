@@ -33,13 +33,14 @@ compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder
 # upweight "ball"
 prompt = "a cat playing with a ball++ in the forest"
 conditioning = compel.build_conditioning_tensor(prompt)
+# or: conditioning = compel([prompt])
 
 # generate image
 images = pipeline(prompt_embeds=conditioning, num_inference_steps=20).images
 images[0].save("image.jpg")
 ```
 
-For batched input, use `torch.cat` to merge multiple conditioning tensors into one:
+For batched input, use the __call__ interface to compel:
 
 ```python
 import torch
@@ -51,7 +52,7 @@ pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1
 compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
 
 prompts = ["a cat playing with a ball++ in the forest", "a dog playing with a ball in the forest"]
-prompt_embeds = torch.cat([compel.build_conditioning_tensor(prompt) for prompt in prompts])
+prompt_embeds = compel(prompts)
 images = pipeline(prompt_embeds=prompt_embeds).images
 
 images[0].save("image0.jpg")
@@ -64,16 +65,18 @@ images[1].save("image1.jpg")
 
 To enable, initialize `Compel` with `truncate_long_prompts=False` (default is True). Prompts that are longer than the model's `max_token_length` will be chunked and padded out to an integer multiple of `max_token_length`. 
 
-If you're working with a negative prompt, you will probably need to use `compel.pad_conditioning_tensors_to_same_length()` to avoid having the model complain about mismatched conditioning tensor lengths:
+Note that even if you don't use a negative prompt, you'll need to build a conditioning tensor for a negative prompt of at least `""`, and use `compel.pad_conditioning_tensors_to_same_length()`, otherwise the you'll get an error about mismatched conditioning tensor lengths:
 
 ```python
 compel = Compel(..., truncate_long_prompts=False)
 prompt = "a cat playing with a ball++ in the forest, amazing, exquisite, stunning, masterpiece, skilled, powerful, incredible, amazing, trending on gregstation, greg, greggy, greggs greggson, greggy mcgregface, ..." # very long prompt
-negative_prompt = "dog, football, rainforest" # short prompt
 conditioning = compel.build_conditioning_tensor(prompt)
+negative_prompt = "" # it's necessary to create an empty prompt - it can also be very long, if you want
 negative_conditioning = compel.build_conditioning_tensor(negative_prompt)
 [conditioning, negative_conditioning] = compel.pad_conditioning_tensors_to_same_length([conditioning, negative_conditioning])
 ```
+
+### 0.1.9 - broken
 
 ### 0.1.8 - downgrade Python min version to 3.7
 
