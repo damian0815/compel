@@ -23,6 +23,19 @@ class Compel:
                  textual_inversion_manager: Optional[BaseTextualInversionManager] = None,
                  dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
                  truncate_long_prompts: bool=True):
+        """
+        Initialize Compel. The tokenizer and text_encoder can be lifted directly from any DiffusionPipeline.
+
+        `textual_inversion_manager`: Optional instance to handle expanding multi-vector textual inversion tokens.
+        `dtype_for_device_getter`: A Callable that returns a torch dtype for a given device. You probably don't need to
+            use this.
+        `truncate_long_prompts`: if True, truncate input prompts to 77 tokens long including beginning/end markers
+            (default behaviour).
+            If False, do not truncate, and instead assemble as many 77 token long chunks, each capped by beginning/end
+            markers, as is necessary to encode the whole prompt. You will likely need to supply both positive and
+            negative prompts in this case - use `pad_conditioning_tensors_to_same_length` to prevent having tensor
+            length mismatch errors when passing the embeds on to your DiffusionPipeline for inference.
+        """
         self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
                                                         text_encoder=text_encoder,
                                                         textual_inversion_manager=textual_inversion_manager,
