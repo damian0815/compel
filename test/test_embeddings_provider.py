@@ -6,10 +6,10 @@ import torch
 from src.compel.embeddings_provider import EmbeddingsProvider
 from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
-def make_dummy_embeddings_provider(max_length=10, truncate=True) -> EmbeddingsProvider:
+def make_dummy_embeddings_provider(max_length=10, truncate=True, padding_mask_value=1) -> EmbeddingsProvider:
     tokenizer = DummyTokenizer(max_length)
     text_encoder = DummyTransformer()
-    return EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder, truncate=truncate)
+    return EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder, truncate=truncate, padding_attention_mask_value=padding_mask_value)
 
 
 class EmbeddingsProviderTestCase(unittest.TestCase):
@@ -84,7 +84,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
 
     def test_upweighting_prompt_fragments(self):
         max_length = 10
-        ep = make_dummy_embeddings_provider(max_length=max_length)
+        ep = make_dummy_embeddings_provider(max_length=max_length, padding_mask_value=0)
 
         text_batch = [[' '.join(KNOWN_WORDS)]]
         fragment_weights_batch = [[1]]
@@ -108,7 +108,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
 
     def test_downweighting_prompt_fragments(self):
         max_length = 10
-        ep = make_dummy_embeddings_provider(max_length=max_length)
+        ep = make_dummy_embeddings_provider(max_length=max_length, padding_mask_value=0)
 
         # downweighting
         text_batch = [[KNOWN_WORDS[0], KNOWN_WORDS[1]]]
@@ -142,7 +142,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
 
     def test_too_long_weighted_prompt_fragments_truncate(self):
         max_length = 10
-        ep = make_dummy_embeddings_provider(max_length=max_length, truncate=True)
+        ep = make_dummy_embeddings_provider(max_length=max_length, truncate=True, padding_mask_value=0)
 
 
         # too many weighted fragments
@@ -162,7 +162,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
 
     def test_too_long_weighted_prompt_fragments_notruncate(self):
         max_length = 10
-        ep = make_dummy_embeddings_provider(max_length=max_length, truncate=False)
+        ep = make_dummy_embeddings_provider(max_length=max_length, truncate=False, padding_mask_value=0)
 
         # too many weighted fragments
         text_batch = [[KNOWN_WORDS[0], ' '.join(reversed(KNOWN_WORDS*3)), ' '.join(KNOWN_WORDS[1:3], )]]

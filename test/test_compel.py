@@ -20,7 +20,7 @@ def make_test_conditioning(text_encoder: DummyTransformer,
                            tokenizer: DummyTokenizer,
                            token_ids: List[int],
                            truncate: bool=True,
-                           pad_to_length: Optional[int]=None,
+                           pad_mask_value: int=1
                            ) -> torch.Tensor:
     remaining_tokens = token_ids.copy()
     conditioning = None
@@ -32,7 +32,7 @@ def make_test_conditioning(text_encoder: DummyTransformer,
         pad_length = (tokenizer.model_max_length - len(chunk_token_ids) - 2)
         post_padding = [tokenizer.eos_token_id] + \
                        [tokenizer.pad_token_id] * pad_length
-        chunk_mask_tensor = torch.tensor([1] + [1] * len(chunk_token_ids) + [1] + [0] * pad_length, device=text_encoder.device)
+        chunk_mask_tensor = torch.tensor([1] + [1] * len(chunk_token_ids) + [1] + [pad_mask_value] * pad_length, device=text_encoder.device)
         chunk_token_ids_tensor = torch.tensor(pre_padding + chunk_token_ids + post_padding, device=text_encoder.device)
 
         assert chunk_token_ids_tensor.shape[0] == tokenizer.model_max_length
@@ -47,18 +47,6 @@ def make_test_conditioning(text_encoder: DummyTransformer,
         if truncate or len(remaining_tokens) == 0:
             break
 
-    if pad_to_length is not None:
-        empty_token_ids = torch.tensor([tokenizer.bos_token_id] + [tokenizer.eos_token_id] +
-                                       [tokenizer.pad_token_id] * (tokenizer.model_max_length-2),
-                                       dtype=torch.int,
-                                       device=text_encoder.device
-                                       )
-        empty_mask = torch.tensor([1] + [1] + [0] * (tokenizer.model_max_length-2), device=text_encoder.device)
-        empty_conditioning = text_encoder(input_ids=empty_token_ids.unsqueeze(0),
-                                          attention_mask=empty_mask.unsqueeze(0)).last_hidden_state
-        while pad_to_length > conditioning.shape[1]:
-            conditioning = torch.cat([conditioning, empty_conditioning], dim=1)
-
     return conditioning
 
 
@@ -66,7 +54,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
 
     def test_tokenizing(self):
         tokenizer = DummyTokenizer(model_max_length=5)
-        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer())
+        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer(), padding_attention_mask_value=0)
 
         prompts = ['a b']
         token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
@@ -101,7 +89,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
 
     def test_long_tokenizing(self):
         tokenizer = DummyTokenizer(model_max_length=5)
-        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer(), truncate=False)
+        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer(), truncate=False, padding_attention_mask_value=0)
 
         prompts = ['a b c c b a a c b']
         token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
@@ -119,7 +107,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
     def test_tokenize_to_mask(self):
         tokenizer = DummyTokenizer(model_max_length=7)
         text_encoder = DummyTransformer()
-        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder)
+        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder, padding_attention_mask_value=0)
 
         fragments = ['a b']
         _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1]*len(fragments), device='cpu')
@@ -206,7 +194,6 @@ class CompelTestCase(unittest.TestCase):
                                                                 truncate=False)
         expected_negative_conditioning = make_test_conditioning(text_encoder,
                                                                 tokenizer, [],
-                                                                pad_to_length=expected_positive_conditioning.shape[1],
                                                                 truncate=False)
         [expected_positive_conditioning, expected_negative_conditioning] = compel.pad_conditioning_tensors_to_same_length(
             [expected_positive_conditioning, expected_negative_conditioning])

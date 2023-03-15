@@ -16,12 +16,13 @@ class BaseTextualInversionManager(ABC):
 class EmbeddingsProvider:
 
     def __init__(self,
-                tokenizer: CLIPTokenizer,
-                text_encoder: CLIPTextModel,
-                textual_inversion_manager: BaseTextualInversionManager = None,
-                dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
-                truncate: bool = True
-                ):
+                 tokenizer: CLIPTokenizer,
+                 text_encoder: CLIPTextModel,
+                 textual_inversion_manager: BaseTextualInversionManager = None,
+                 dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
+                 truncate: bool = True,
+                 padding_attention_mask_value: int = 1,
+                 ):
         """
         `tokenizer`: converts strings to lists of int token ids
         `text_encoder`: convert lists of token ids to embedding tensors
@@ -29,11 +30,13 @@ class EmbeddingsProvider:
         `dtype_for_device_getter`: callback that returns an appropriate dtype for the requested device. if unset, defaults to torch.float32.
         `truncate`: if True, truncate inputs to the maximum length specified by the tokenizer. if False, returns
                     tensors that may be longer than the maximum length (but will always be an integer multiple of maximum length)
+        `padding_attention_mask_value`: Value to write into the mask for padding tokens. Stable Diffusion needs 1.
         """
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
         self.textual_inversion_manager = textual_inversion_manager
         self.truncate_to_model_max_length = truncate
+        self.padding_attention_mask_value = padding_attention_mask_value
 
         # by default always use float32
         self.get_dtype_for_device = dtype_for_device_getter
@@ -66,6 +69,8 @@ class EmbeddingsProvider:
 
         :param text_batch: A list of fragments of text to which different weights are to be applied.
         :param fragment_weights_batch: A list of weights, one for each entry in `fragments`.
+        :param should_return_tokens: If True, return a tuple of (embeddings, tokens), otherwise just return embeddings.
+        :param device: Where to put the constructed tensor(s)
         :return: A tensor of shape `[1, 77, token_dim]` containing weighted embeddings where token_dim is 768 for SD1
                     and 1280 for SD2
         """
@@ -250,7 +255,7 @@ class EmbeddingsProvider:
             pad_length = self.max_token_count - len(chunk_token_ids)
             chunk_token_ids += [self.tokenizer.pad_token_id] * pad_length
             chunk_token_weights += [1.0] * pad_length
-            chunk_mask += [0.0] * pad_length
+            chunk_mask += [self.padding_attention_mask_value] * pad_length
 
             all_token_ids += chunk_token_ids
             all_token_weights += chunk_token_weights
