@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, Optional
 
 import torch
 
@@ -43,12 +43,15 @@ class DummyTransformer:
     def get_input_embeddings(self):
         return self.embeddings
 
-    def forward(self, input_ids: torch.Tensor, return_dict: bool=True):
+    def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor], return_dict: bool=True):
         if input_ids.shape[0] > 1:
             raise AssertionError("for unit testing, only batch size =1 is supported")
         all_embeddings = torch.cat([e.unsqueeze(0) for e in self.embeddings]).to(self.device)
         embeddings = torch.index_select(all_embeddings, dim=0, index=input_ids.to(self.device).squeeze(0)
                                         ).unsqueeze(0)
+        if attention_mask is not None:
+            # this is not expected to match what Transformers actually does
+            embeddings = embeddings * attention_mask.unsqueeze(2).expand(embeddings.shape)
         if not return_dict:
             return [embeddings, torch.empty_like(embeddings)]
 
@@ -63,8 +66,8 @@ class DummyTransformer:
         o = EmbeddingsObject(embeddings)
         return o
 
-    def __call__(self, input_ids, **kwargs):
-        return self.forward(input_ids=input_ids, return_dict=True)
+    def __call__(self, input_ids, attention_mask=None, **kwargs):
+        return self.forward(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
 
 class DummyTokenizer():
     def __init__(self, model_max_length=77):

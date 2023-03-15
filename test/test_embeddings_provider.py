@@ -46,10 +46,12 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         token_ids = torch.tensor([ep.tokenizer.bos_token_id] + KNOWN_WORDS_TOKEN_IDS +
                                  [ep.tokenizer.eos_token_id] +
                                  [ep.tokenizer.pad_token_id] * (max_length - 2 - len(KNOWN_WORDS_TOKEN_IDS)))
+        unweighted_embeddings = ep.build_weighted_embedding_tensor(token_ids, torch.tensor([1] * len(token_ids)))
 
-        weighted_embeddings_1 = ep.build_weighted_embedding_tensor(token_ids, torch.tensor([1] * len(token_ids)))
-        weighted_embeddings_2 = ep.build_weighted_embedding_tensor(token_ids, torch.tensor([2] * len(token_ids)))
-        self.assertTrue(torch.allclose(empty_z + (weighted_embeddings_1-empty_z) * 2,
+        # confirm that the weighting works as expected (delta from empty)
+        weight = 2.0
+        weighted_embeddings_2 = ep.build_weighted_embedding_tensor(token_ids, torch.tensor([weight] * len(token_ids)))
+        self.assertTrue(torch.allclose(empty_z + (unweighted_embeddings-empty_z) * weight,
                                        weighted_embeddings_2,
                                        atol=1e-5))
 
@@ -57,9 +59,27 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         rand_weights = 1 + torch.rand([len(token_ids)])
         weighted_embeddings_rand = ep.build_weighted_embedding_tensor(token_ids, rand_weights)
         weights_expanded = rand_weights.unsqueeze(1).expand(-1,768).unsqueeze(0)
-        self.assertTrue(torch.allclose(empty_z + (weighted_embeddings_1-empty_z) * weights_expanded,
+        self.assertTrue(torch.allclose(empty_z + (unweighted_embeddings-empty_z) * weights_expanded,
                                        weighted_embeddings_rand,
                                        atol=1e-7))
+
+        # mask
+        mask = torch.Tensor([1, 1, 1, 0, 0, 0, 0, 0, 0, 0])
+        weighted_embeddings_masked = ep.build_weighted_embedding_tensor(token_ids, torch.tensor([1] * len(token_ids)),
+                                                                        attention_mask=mask)
+        # note: test framework's masking is not expected to match the actual Text Encoder's - it just does a brainless multiply
+        self.assertTrue(torch.allclose(unweighted_embeddings * mask.unsqueeze(1).expand(-1,768).unsqueeze(0),
+                                       weighted_embeddings_masked,
+                                       atol=1e-7))
+
+        mask = torch.Tensor([0, 1, 1, 1, 0, 0, 1, 0, 1, 1])
+        weighted_embeddings_masked = ep.build_weighted_embedding_tensor(token_ids, torch.tensor([1] * len(token_ids)),
+                                                                        attention_mask=mask)
+        # note: test framework's masking is not expected to match the actual Text Encoder's - it just does a brainless multiply
+        self.assertTrue(torch.allclose(unweighted_embeddings * mask.unsqueeze(1).expand(-1,768).unsqueeze(0),
+                                       weighted_embeddings_masked,
+                                       atol=1e-7))
+
 
 
     def test_upweighting_prompt_fragments(self):
@@ -136,6 +156,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor(expected_weights))
         self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
 
+
     def test_too_long_weighted_prompt_fragments_notruncate(self):
         max_length = 10
         ep = make_dummy_embeddings_provider(max_length=max_length, truncate=False)
@@ -157,9 +178,9 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         expected_token_ids = torch.tensor(expected_token_ids_part1 + expected_token_ids_part2)
         expected_weights = ([1] + [1] + [2, 2, 2, 2, 2, 2, 2] + [1] +
                             [1] + [2, 2] + [3, 3] + [1] + ([1] * 4))
-        expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor(expected_weights))
+        expected_mask = torch.Tensor([1] * 16 + [0] * 4)
+        expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor(expected_weights), attention_mask=expected_mask)
         self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
-
 
 
 if __name__ == '__main__':

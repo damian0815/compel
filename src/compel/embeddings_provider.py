@@ -1,6 +1,6 @@
 import math
 from abc import ABC
-from typing import Callable, Union, Tuple, List
+from typing import Callable, Union, Tuple, List, Optional
 
 import torch
 from transformers import CLIPTokenizer, CLIPTextModel
@@ -264,7 +264,7 @@ class EmbeddingsProvider:
     def build_weighted_embedding_tensor(self,
                                         token_ids: torch.Tensor,
                                         per_token_weights: torch.Tensor,
-                                        attention_mask: torch.Tensor) -> torch.Tensor:
+                                        attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         """
         Build a tensor that embeds the passed-in token IDs and applies the given per_token weights
 
@@ -293,11 +293,15 @@ class EmbeddingsProvider:
         chunk_size = self.max_token_count
         while chunk_start_index < token_ids.shape[0]:
             next_chunk_start_index = chunk_start_index+chunk_size
-            chunk_token_ids = token_ids[chunk_start_index:next_chunk_start_index]
             chunk_per_token_weights = per_token_weights[chunk_start_index:next_chunk_start_index]
-            chunk_attention_mask = attention_mask[chunk_start_index:next_chunk_start_index]
+            chunk_token_ids = token_ids[chunk_start_index:next_chunk_start_index].unsqueeze(0)
+            chunk_attention_mask = (
+                attention_mask[chunk_start_index:next_chunk_start_index].unsqueeze(0)
+                if attention_mask is not None
+                else None
+            )
 
-            z = self.text_encoder(chunk_token_ids.unsqueeze(0), attention_mask=chunk_attention_mask.unsqueeze(0), return_dict=False)[0]
+            z = self.text_encoder(chunk_token_ids, attention_mask=chunk_attention_mask, return_dict=False)[0]
             batch_weights_expanded = chunk_per_token_weights.reshape(
                 chunk_per_token_weights.shape + (1,)).expand(z.shape).to(z)
 

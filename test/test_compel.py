@@ -111,7 +111,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1] * 3 + [1, 1, 1] + [0, 0])))
 
 
-    def test_mask(self):
+    def test_tokenize_to_mask(self):
         tokenizer = DummyTokenizer(model_max_length=7)
         text_encoder = DummyTransformer()
         embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder)
