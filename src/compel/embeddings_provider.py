@@ -151,7 +151,7 @@ class EmbeddingsProvider:
                     #        1.0 at PI/4, and
                     #        inf at PI/2
                     # -> tan((1-weight)*PI/2) should give us ideal lerp weights
-                    epsilon = 1e-9
+                    epsilon = 1e-5
                     fragment_weight = max(epsilon, fragment_weight) # inf is bad
                     embedding_lerp_weight = math.tan((1.0 - fragment_weight) * math.pi / 2)
                     # todo handle negative weight?
