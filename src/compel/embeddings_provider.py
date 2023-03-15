@@ -1,12 +1,17 @@
 import math
 from abc import ABC
+from enum import Enum
 from typing import Callable, Union, Tuple, List, Optional
 
 import torch
 from transformers import CLIPTokenizer, CLIPTextModel
 
-__all__ = ["EmbeddingsProvider"]
+__all__ = ["EmbeddingsProvider", "DownweightMode"]
 
+
+class DownweightMode(Enum):
+    REMOVE = 0  # Remove downweighted tokens from the token sequence (shifts all subsequent tokens)
+    MASK = 1,   # Default: Leave tokens in-place but mask them out using attention masking
 
 class BaseTextualInversionManager(ABC):
     def expand_textual_inversion_token_ids_if_necessary(self, token_ids: List[int]) -> List[int]:
@@ -22,6 +27,7 @@ class EmbeddingsProvider:
                  dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
                  truncate: bool = True,
                  padding_attention_mask_value: int = 1,
+                 downweight_mode: DownweightMode = DownweightMode.MASK
                  ):
         """
         `tokenizer`: converts strings to lists of int token ids
@@ -30,13 +36,14 @@ class EmbeddingsProvider:
         `dtype_for_device_getter`: callback that returns an appropriate dtype for the requested device. if unset, defaults to torch.float32.
         `truncate`: if True, truncate inputs to the maximum length specified by the tokenizer. if False, returns
                     tensors that may be longer than the maximum length (but will always be an integer multiple of maximum length)
-        `padding_attention_mask_value`: Value to write into the mask for padding tokens. Stable Diffusion needs 1.
+        `padding_attention_mask_value`: Value to write into the attention mask for padding tokens. Stable Diffusion needs 1.
         """
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
         self.textual_inversion_manager = textual_inversion_manager
         self.truncate_to_model_max_length = truncate
         self.padding_attention_mask_value = padding_attention_mask_value
+        self.downweight_mode = downweight_mode
 
         # by default always use float32
         self.get_dtype_for_device = dtype_for_device_getter
@@ -113,15 +120,24 @@ class EmbeddingsProvider:
 
             for index, fragment_weight in enumerate(weights):
                 if fragment_weight < 1:
-                    fragment_start_token_id, fragment_end_token_id = fragment_token_index_ranges[index]
-                    # mask out this fragment
-                    mask_without_fragment = mask.clone()
-                    mask_without_fragment[fragment_start_token_id:fragment_end_token_id+1] = 0
-                    # but don't mask chunk-delimiting eos/bos markers
-                    if not self.truncate_to_model_max_length:
-                        mask_without_fragment[0::self.tokenizer.model_max_length] = 1
-                        mask_without_fragment[self.tokenizer.model_max_length-1::self.tokenizer.model_max_length] = 1
-                    embedding_without_this = self.build_weighted_embedding_tensor(tokens, per_token_weights, mask_without_fragment)
+                    if self.downweight_mode == DownweightMode.MASK:
+                        fragment_start_token_id, fragment_end_token_id = fragment_token_index_ranges[index]
+                        # mask out this fragment
+                        mask_without_fragment = mask.clone()
+                        mask_without_fragment[fragment_start_token_id:fragment_end_token_id+1] = 0
+                        if not self.truncate_to_model_max_length:
+                            # but don't mask chunk-delimiting eos/bos markers
+                            mask_without_fragment[0::self.tokenizer.model_max_length] = 1
+                            mask_without_fragment[self.tokenizer.model_max_length-1::self.tokenizer.model_max_length] = 1
+                        embedding_without_this = self.build_weighted_embedding_tensor(tokens, per_token_weights, mask_without_fragment)
+                    else:
+                        fragments_without_this = fragments[0:index] + fragments[index+1:]
+                        weights_without_this = weights[0:index] + weights[index+1:]
+                        tokens_without_fragment, per_token_weights_without_fragment, mask_without_fragment = \
+                            self.get_token_ids_and_expand_weights(fragments_without_this, weights_without_this, device=device)
+                        embedding_without_this = self.build_weighted_embedding_tensor(tokens_without_fragment,
+                                                                                      per_token_weights_without_fragment,
+                                                                                      mask_without_fragment)
 
                     embeddings = torch.cat((embeddings, embedding_without_this.unsqueeze(0)), dim=1)
                     # weight of the embedding *without* this fragment gets *stronger* as its weight approaches 0

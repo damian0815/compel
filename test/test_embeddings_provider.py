@@ -3,13 +3,13 @@ import unittest
 
 import torch
 
-from src.compel.embeddings_provider import EmbeddingsProvider
+from src.compel.embeddings_provider import EmbeddingsProvider, DownweightMode
 from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
-def make_dummy_embeddings_provider(max_length=10, truncate=True, padding_mask_value=1) -> EmbeddingsProvider:
+def make_dummy_embeddings_provider(max_length=10, **kwargs) -> EmbeddingsProvider:
     tokenizer = DummyTokenizer(max_length)
     text_encoder = DummyTransformer()
-    return EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder, truncate=truncate, padding_attention_mask_value=padding_mask_value)
+    return EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder, **kwargs)
 
 
 class EmbeddingsProviderTestCase(unittest.TestCase):
@@ -84,7 +84,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
 
     def test_upweighting_prompt_fragments(self):
         max_length = 10
-        ep = make_dummy_embeddings_provider(max_length=max_length, padding_mask_value=0)
+        ep = make_dummy_embeddings_provider(max_length=max_length, padding_attention_mask_value=0)
 
         text_batch = [[' '.join(KNOWN_WORDS)]]
         fragment_weights_batch = [[1]]
@@ -106,9 +106,9 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
 
 
-    def test_downweighting_prompt_fragments(self):
+    def test_downweighting_prompt_fragments_mask(self):
         max_length = 10
-        ep = make_dummy_embeddings_provider(max_length=max_length, padding_mask_value=0)
+        ep = make_dummy_embeddings_provider(max_length=max_length, padding_attention_mask_value=0, downweight_mode=DownweightMode.MASK)
 
         # downweighting
         text_batch = [[KNOWN_WORDS[0], KNOWN_WORDS[1]]]
@@ -139,10 +139,39 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
                                                                          normalize=True)
         self.assertTrue(torch.allclose(embeddings, expected_embeddings, atol=1e-8))
 
+    def test_downweighting_prompt_fragments_remove(self):
+        max_length = 10
+        ep = make_dummy_embeddings_provider(max_length=max_length, downweight_mode=DownweightMode.REMOVE)
+        # downweighting
+        text_batch = [[KNOWN_WORDS[0], KNOWN_WORDS[1]]]
+        downweighted_fragment_weight = 0.5
+        fragment_weights_batch = [[1, downweighted_fragment_weight]]
+        embeddings = ep.get_embeddings_for_weighted_prompt_fragments(text_batch, fragment_weights_batch)
+        expected_token_ids = torch.tensor([ep.tokenizer.bos_token_id] + KNOWN_WORDS_TOKEN_IDS[0:2] +
+                             [ep.tokenizer.eos_token_id] +
+                             [ep.tokenizer.pad_token_id] * (max_length-4))
+        expected_weights = [1] + [1, downweighted_fragment_weight] + [1] * 7
+        # when downweighting, additionally blend against a version of the prompt without the downweighted term
+        expected_token_ids_cut = torch.tensor([ep.tokenizer.bos_token_id] + KNOWN_WORDS_TOKEN_IDS[0:1] +
+                             [ep.tokenizer.eos_token_id] +
+                             [ep.tokenizer.pad_token_id] * (max_length-3))
+        expected_weights_cut = [1] + [1] + [1] * 8
+        expected_embeddings_main_part = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor(expected_weights))
+        expected_embeddings_cut = ep.build_weighted_embedding_tensor(expected_token_ids_cut, torch.tensor(expected_weights_cut))
+
+        downweighted_lerp_weight = math.tan((1.0 - downweighted_fragment_weight) * math.pi / 2)
+        blend_weights = [1.0, downweighted_lerp_weight]
+
+        expected_embeddings = EmbeddingsProvider.apply_embedding_weights(torch.cat([expected_embeddings_main_part,
+                                                                                    expected_embeddings_cut]).unsqueeze(0),
+                                                                         per_embedding_weights=blend_weights,
+                                                                         normalize=True)
+        self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
+
 
     def test_too_long_weighted_prompt_fragments_truncate(self):
         max_length = 10
-        ep = make_dummy_embeddings_provider(max_length=max_length, truncate=True, padding_mask_value=0)
+        ep = make_dummy_embeddings_provider(max_length=max_length, truncate=True, padding_attention_mask_value=0)
 
 
         # too many weighted fragments
@@ -162,7 +191,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
 
     def test_too_long_weighted_prompt_fragments_notruncate(self):
         max_length = 10
-        ep = make_dummy_embeddings_provider(max_length=max_length, truncate=False, padding_mask_value=0)
+        ep = make_dummy_embeddings_provider(max_length=max_length, truncate=False, padding_attention_mask_value=0)
 
         # too many weighted fragments
         text_batch = [[KNOWN_WORDS[0], ' '.join(reversed(KNOWN_WORDS*3)), ' '.join(KNOWN_WORDS[1:3], )]]

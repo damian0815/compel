@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import Enum
 from typing import Union, Optional, Callable, List, Tuple
 
 import torch
@@ -6,14 +7,15 @@ from transformers import CLIPTokenizer, CLIPTextModel
 
 from . import cross_attention_control
 from .conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
-from .embeddings_provider import EmbeddingsProvider, BaseTextualInversionManager
+from .embeddings_provider import EmbeddingsProvider, BaseTextualInversionManager, DownweightMode
 from .prompt_parser import Blend, FlattenedPrompt, PromptParser, CrossAttentionControlSubstitute
 
-__all__ = ["Compel"]
+__all__ = ["Compel", "DownweightMode"]
 
 @dataclass
 class ExtraConditioningInfo:
     pass
+
 
 class Compel:
 
@@ -23,7 +25,9 @@ class Compel:
                  text_encoder: CLIPTextModel,
                  textual_inversion_manager: Optional[BaseTextualInversionManager] = None,
                  dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
-                 truncate_long_prompts: bool=True):
+                 truncate_long_prompts: bool = True,
+                 padding_attention_mask_value: int = 1,
+                 downweight_mode: DownweightMode = DownweightMode.MASK):
         """
         Initialize Compel. The tokenizer and text_encoder can be lifted directly from any DiffusionPipeline.
 
@@ -36,12 +40,15 @@ class Compel:
             markers, as is necessary to encode the whole prompt. You will likely need to supply both positive and
             negative prompts in this case - use `pad_conditioning_tensors_to_same_length` to prevent having tensor
             length mismatch errors when passing the embeds on to your DiffusionPipeline for inference.
+        `padding_attention_mask_value`: Value to write into the attention mask for padding tokens. Stable Diffusion needs 1.
         """
         self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
                                                         text_encoder=text_encoder,
                                                         textual_inversion_manager=textual_inversion_manager,
                                                         dtype_for_device_getter=dtype_for_device_getter,
-                                                        truncate=truncate_long_prompts
+                                                        truncate=truncate_long_prompts,
+                                                        padding_attention_mask_value = padding_attention_mask_value,
+                                                        downweight_mode = downweight_mode
                                                         )
 
     @property
