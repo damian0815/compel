@@ -17,6 +17,7 @@ class ExtraConditioningInfo:
 
 class Compel:
 
+
     def __init__(self,
                  tokenizer: CLIPTokenizer,
                  text_encoder: CLIPTextModel,

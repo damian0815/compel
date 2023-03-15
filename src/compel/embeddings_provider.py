@@ -89,8 +89,8 @@ class EmbeddingsProvider:
             # closer the resulting embedding is to an embedding for a prompt that simply lacks this fragment.
 
             # handle weights >=1
-            tokens, per_token_weights = self.get_token_ids_and_expand_weights(fragments, weights, device=device)
-            base_embedding = self.build_weighted_embedding_tensor(tokens, per_token_weights)
+            tokens, per_token_weights, mask = self.get_token_ids_and_expand_weights(fragments, weights, device=device)
+            base_embedding = self.build_weighted_embedding_tensor(tokens, per_token_weights, mask)
 
             # this is our starting point
             embeddings = base_embedding.unsqueeze(0)
@@ -108,7 +108,7 @@ class EmbeddingsProvider:
                 if fragment_weight < 1:
                     fragments_without_this = fragments[:index] + fragments[index+1:]
                     weights_without_this = weights[:index] + weights[index+1:]
-                    tokens, per_token_weights = self.get_token_ids_and_expand_weights(fragments_without_this, weights_without_this, device=device)
+                    tokens, per_token_weights, mask = self.get_token_ids_and_expand_weights(fragments_without_this, weights_without_this, device=device)
                     embedding_without_this = self.build_weighted_embedding_tensor(tokens, per_token_weights)
 
                     embeddings = torch.cat((embeddings, embedding_without_this.unsqueeze(0)), dim=1)
@@ -183,7 +183,8 @@ class EmbeddingsProvider:
 
         return result
 
-    def get_token_ids_and_expand_weights(self, fragments: List[str], weights: List[float], device: str) -> (torch.Tensor, torch.Tensor):
+    def get_token_ids_and_expand_weights(self, fragments: List[str], weights: List[float], device: str
+                                         ) -> (torch.Tensor, torch.Tensor, torch.Tensor):
         '''
         Given a list of text fragments and corresponding weights: tokenize each fragment, append the token sequences
         together and return a padded token sequence starting with the bos marker, ending with the eos marker, and padded
@@ -193,7 +194,8 @@ class EmbeddingsProvider:
         :param fragments: Text fragments to tokenize and concatenate. May be empty.
         :param weights: Per-fragment weights (i.e. quasi-CFG scaling). Values from 0 to inf are permitted. In practise with SD1.5
                         values >1.6 tend to produce garbage output. Must have same length as `fragment`.
-        :return: A tuple of tensors `(token_ids, weights)`. `token_ids` is ints, `weights` is floats, both have shape `[self.max_length]`.
+        :return: A tuple of tensors `(token_ids, weights, mask)`. `token_ids` is ints, `weights` is floats, `mask` is
+                        ints, all have shape `[self.max_length]`.
         '''
         if len(fragments) != len(weights):
             raise ValueError(f"lengths of text and fragment_weights lists are not the same ({len(fragments)} != {len(weights)})")
@@ -215,7 +217,7 @@ class EmbeddingsProvider:
         return self._chunk_and_pad_token_ids(all_token_ids, all_token_weights, device=device)
 
     def _chunk_and_pad_token_ids(self, token_ids: List[int], token_weights: List[float], device: str
-                                 ) -> Tuple[torch.Tensor, torch.Tensor]:
+                                 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
 
         remaining_token_ids = token_ids
         remaining_token_weights = token_weights
@@ -223,6 +225,7 @@ class EmbeddingsProvider:
 
         all_token_ids = []
         all_token_weights = []
+        all_masks = []
         while True:
             # each chunk must leave room for bos/eos
             chunk_token_ids = remaining_token_ids[0:chunk_length_without_eos_bos_markers]
@@ -235,12 +238,16 @@ class EmbeddingsProvider:
             # (typically self.max_length == 77)
             chunk_token_ids = [self.tokenizer.bos_token_id] + chunk_token_ids + [self.tokenizer.eos_token_id]
             chunk_token_weights = [1.0] + chunk_token_weights + [1.0]
+            chunk_mask = [1.0] * len(chunk_token_ids)
+
             pad_length = self.max_token_count - len(chunk_token_ids)
             chunk_token_ids += [self.tokenizer.pad_token_id] * pad_length
             chunk_token_weights += [1.0] * pad_length
+            chunk_mask += [0.0] * pad_length
 
             all_token_ids += chunk_token_ids
             all_token_weights += chunk_token_weights
+            all_masks += chunk_mask
 
             if self.truncate_to_model_max_length or len(remaining_token_ids) == 0:
                 break
@@ -249,17 +256,24 @@ class EmbeddingsProvider:
         all_per_token_weights_tensor = torch.tensor(all_token_weights,
                                                     dtype=self.get_dtype_for_device(self.text_encoder.device),
                                                     device=device)
+        all_masks = torch.tensor(all_masks, dtype=torch.long, device=device)
         #print(f"assembled all_token_ids_tensor with shape {all_token_ids_tensor.shape}")
-        return all_token_ids_tensor, all_per_token_weights_tensor
+        return all_token_ids_tensor, all_per_token_weights_tensor, all_masks
 
 
-    def build_weighted_embedding_tensor(self, token_ids: torch.Tensor, per_token_weights: torch.Tensor) -> torch.Tensor:
+    def build_weighted_embedding_tensor(self,
+                                        token_ids: torch.Tensor,
+                                        per_token_weights: torch.Tensor,
+                                        attention_mask: torch.Tensor) -> torch.Tensor:
         """
         Build a tensor that embeds the passed-in token IDs and applies the given per_token weights
 
         :param token_ids: A tensor of shape `n*[self.max_length]` containing token IDs (ints) where n is some arbitrary
-            integer (i.e. n==1 for shorter prompts, or it may be >1 if there are more than max_length tokens in the original prompt)
+            integer (i.e. n==1 for shorter prompts, or it may be >1 if there are more than max_length tokens in the
+            original prompt)
         :param per_token_weights: A tensor containing weights (floats), with the same shape as token_ids
+        :param attention_mask: A tensor containing a mask (ints), with the same shape as token_ids, where 1 means use
+            the corresponding token and 0 means ignore the corresponding token.
 
         :return: A tensor of shape `[1, token_ids.shape[0], token_dim]` representing the requested weighted embeddings
             where `token_dim` is 768 for SD1 and 1280 for SD2.
@@ -281,8 +295,9 @@ class EmbeddingsProvider:
             next_chunk_start_index = chunk_start_index+chunk_size
             chunk_token_ids = token_ids[chunk_start_index:next_chunk_start_index]
             chunk_per_token_weights = per_token_weights[chunk_start_index:next_chunk_start_index]
+            chunk_attention_mask = attention_mask[chunk_start_index:next_chunk_start_index]
 
-            z = self.text_encoder(chunk_token_ids.unsqueeze(0), return_dict=False)[0]
+            z = self.text_encoder(chunk_token_ids.unsqueeze(0), attention_mask=chunk_attention_mask.unsqueeze(0), return_dict=False)[0]
             batch_weights_expanded = chunk_per_token_weights.reshape(
                 chunk_per_token_weights.shape + (1,)).expand(z.shape).to(z)
 

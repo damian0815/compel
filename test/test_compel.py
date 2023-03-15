@@ -64,37 +64,80 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer())
 
         prompts = ['a b']
-        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
         self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 5, 4], dtype=torch.int64)))
         self.assertTrue(torch.equal(weights_tensor, torch.tensor([1.0] + [0.8] * 2 + [1.0] * 2)))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 0, 0])))
 
         prompts = ['a b c']
-        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
         self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5], dtype=torch.int64)))
         self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]))))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 0])))
+
+        prompts = ['']
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 5, 4, 4, 4], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] * 5))))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 0, 0, 0])))
+
+        prompts = []
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 5, 4, 4, 4], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] * 5))))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 0, 0, 0])))
+
+        # truncation
+        prompts = ['a b c a b c a b c']
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] * 5))))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1])))
 
     def test_long_tokenizing(self):
         tokenizer = DummyTokenizer(model_max_length=5)
         embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer(), truncate=False)
 
         prompts = ['a b c c b a a c b']
-        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
-        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5, 3, 2, 1, 0, 5, 3, 0, 2, 1, 5], dtype=torch.int64)))
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5] + [3, 2, 1, 0, 5] + [3, 0, 2, 1, 5], dtype=torch.int64)))
         self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]) * 3)))
+        self.assertTrue(torch.equal(mask, torch.tensor(([1, 1, 1, 1, 1] * 3))))
 
         prompts = ['a b c c b a a c b a']
-        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
         self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5, 3, 2, 1, 0, 5, 3, 0, 2, 1, 5, 3, 0, 5, 4, 4], dtype=torch.int64)))
-        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]) * 3 + [1.0] + [0.8] + [1.0] * 3)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]) * 3 + ([1.0] + [0.8] + [1.0]) + ([1.0] * 2))))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1] * 3 + [1, 1, 1] + [0, 0])))
 
-    def test_embeddings(self):
-        tokenizer = DummyTokenizer(model_max_length=5)
+
+    def test_mask(self):
+        tokenizer = DummyTokenizer(model_max_length=7)
         text_encoder = DummyTransformer()
         embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder)
 
-        prompts = ['a b']
-        token_ids_tensor, weights_tensor = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
-        embeddings_provider.build_weighted_embedding_tensor(token_ids_tensor, weights_tensor)
+        fragments = ['a b']
+        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1]*len(fragments), device='cpu')
+        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 0, 0, 0])
+
+        fragments = ['a b c a b c a']
+        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1]*len(fragments), device='cpu')
+        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 1, 1, 1])
+
+        fragments = ['a', 'b c']
+        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1, 2], device='cpu')
+        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 1, 0, 0])
+
+        # eos/bos only
+        fragments = []
+        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1]*len(fragments), device='cpu')
+        self.assertSequenceEqual(mask.tolist(), [1, 1, 0, 0, 0, 0, 0])
+
+        # too long
+        fragments = ['a b c a b c a b c a b c']
+        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1]*len(fragments), device='cpu')
+        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 1, 1, 1])
+
 
 class CompelTestCase(unittest.TestCase):
 
