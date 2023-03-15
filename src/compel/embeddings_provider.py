@@ -113,7 +113,7 @@ class EmbeddingsProvider:
             # with the embeddings tensors that have the words, such that if the weight of a word is 0.5, the resulting
             # embedding will be exactly half-way between the unweighted prompt and the prompt with the <1 weighted words
             # removed.
-            # eg for "mountain:1 man:0.5", intuitively the "man" should be "half-gone". therefore, append an embedding
+            # e.g. for "mountain:1 man:0.5", intuitively the "man" should be "half-gone". therefore, append an embedding
             # for "mountain" (i.e. without "man") to the already-produced embedding for "mountain man", and weight it
             # such that the resulting lerped embedding is exactly half-way between "mountain man" and "mountain".
             fragment_token_index_ranges = self._get_token_ranges_for_fragments(tokens.tolist(), fragments)
@@ -235,7 +235,7 @@ class EmbeddingsProvider:
         per_fragment_token_ids = self.get_token_ids(fragments, include_start_and_end_markers=False)
         all_token_ids: List[int] = []
         all_token_weights: List[float] = []
-        #print("all fragments:", fragments, weights)
+        # print("all fragments:", fragments, weights)
         for this_fragment_token_ids, weight in zip(per_fragment_token_ids, weights):
             # append
             all_token_ids += this_fragment_token_ids
@@ -285,7 +285,7 @@ class EmbeddingsProvider:
                                                     dtype=self.get_dtype_for_device(self.text_encoder.device),
                                                     device=device)
         all_masks = torch.tensor(all_masks, dtype=torch.long, device=device)
-        #print(f"assembled all_token_ids_tensor with shape {all_token_ids_tensor.shape}")
+        # print(f"assembled all_token_ids_tensor with shape {all_token_ids_tensor.shape}")
         return all_token_ids_tensor, all_per_token_weights_tensor, all_masks
 
 
@@ -344,7 +344,7 @@ class EmbeddingsProvider:
 
         return weighted_z
 
-    def _get_token_ranges_for_fragments(self, chunked_and_padded_token_ids: List[int], fragments: List[str]) -> List[Tuple[int,int]]:
+    def _get_token_ranges_for_fragments(self, chunked_and_padded_token_ids: List[int], fragments: List[str]) -> List[Tuple[int, int]]:
         """
         Match token id sequences for the strings in `fragments` with token id sequences in `chunked_and_padded_token_ids`,
          taking into account any eos and bos markers marking `self.tokenizer.max_model_length` sized chunks.

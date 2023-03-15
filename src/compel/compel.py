@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from enum import Enum
 from typing import Union, Optional, Callable, List, Tuple
 
 import torch

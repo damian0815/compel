@@ -1,7 +1,6 @@
 import string
 from dataclasses import dataclass
-from typing import Union, Optional, Any, List, Tuple
-import re
+from typing import Union, Optional, List, Tuple
 import pyparsing as pp
 
 __all__ = ["PromptParser"]
@@ -151,7 +150,7 @@ class Attention():
     def __repr__(self):
         return f"Attention:{self.children} * {self.weight}"
     def __eq__(self, other):
-        return type(other) is Attention and other.weight == self.weight and other.fragment == self.fragment
+        return type(other) is Attention and other.weight == self.weight and other.children == self.children
 
 class CrossAttentionControlledFragment(BaseFragment):
     pass
@@ -441,7 +440,7 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
 
         raise PromptParser.UnrecognizedOperatorException(operator)
 
-    def parse_fragment_str(x, expression: pp.ParseExpression, in_quotes: bool = False, in_parens: bool = False):
+    def parse_fragment_str(x, expression: pp.ParserElement, in_quotes: bool = False, in_parens: bool = False):
         #print(f"parsing fragment string for {x}")
         fragment_string = x[0]
         if len(fragment_string.strip()) == 0:
