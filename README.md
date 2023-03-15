@@ -61,6 +61,16 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
+### 1.0.0 - new downweighting algorithm 
+
+Downweighting now works by applying an attention mask to remove the downweighted tokens, rather than literally removing them from the sequence. This behaviour is the default, but the old behaviour can be re-enabled by passing `downweight_mode=DownweightMode.REMOVE` on init of the `Compel` instance.
+
+Formerly, downweighting a token worked by both multiplying the weighting of the token's embedding, and doing an inverse-weighted blend with a copy of the token sequence that had the downweighted tokens removed. The intuition is that as weight approaches zero, the tokens being downweighted should be actually removed from the sequence. However, removing the tokens resulted in the positioning of all downstream tokens becoming messed up. The blend ended up blending a lot more than just the tokens in question. 
+
+As of v1.0.0, taking advice from @bonlime (https://github.com/damian0815/compel/issues/7) the procedure is by default different. Downweighting still involves a blend but what is blended is a version of the token sequence with the downweighted tokens masked out, rather than removed. This correctly preserves positioning embeddings of the other tokens. 
+
+Also a bugfix: fix black images on weight 0 (https://github.com/invoke-ai/InvokeAI/issues/2832)
+
 ### 0.1.10 - add support for prompts longer than the model's max token length. 
 
 To enable, initialize `Compel` with `truncate_long_prompts=False` (default is True). Prompts that are longer than the model's `max_token_length` will be chunked and padded out to an integer multiple of `max_token_length`. 

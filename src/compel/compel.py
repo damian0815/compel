@@ -40,6 +40,8 @@ class Compel:
             negative prompts in this case - use `pad_conditioning_tensors_to_same_length` to prevent having tensor
             length mismatch errors when passing the embeds on to your DiffusionPipeline for inference.
         `padding_attention_mask_value`: Value to write into the attention mask for padding tokens. Stable Diffusion needs 1.
+        `downweight_mode`: Specifies whether downweighting should be applied by MASKing out the downweighted tokens
+            (default) or REMOVEing them (legacy behaviour; messes up position embeddings of tokens following).
         """
         self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
                                                         text_encoder=text_encoder,
