@@ -29,14 +29,16 @@ def make_test_conditioning(text_encoder: DummyTransformer,
         pre_padding = [tokenizer.bos_token_id]
         chunk_token_ids = remaining_tokens[0:chunk_length]
         remaining_tokens = remaining_tokens[chunk_length:]
+        pad_length = (tokenizer.model_max_length - len(chunk_token_ids) - 2)
         post_padding = [tokenizer.eos_token_id] + \
-                       [tokenizer.pad_token_id] * (tokenizer.model_max_length - len(chunk_token_ids) - 2)
-        chunk_token_ids = pre_padding + chunk_token_ids + post_padding
-        assert len(chunk_token_ids) == tokenizer.model_max_length
-        this_conditioning = text_encoder(input_ids=torch.tensor(chunk_token_ids,
-                                                            dtype=torch.int,
-                                                            device=text_encoder.device
-                                                            ).unsqueeze(0)).last_hidden_state
+                       [tokenizer.pad_token_id] * pad_length
+        chunk_mask_tensor = torch.tensor([1] + [1] * len(chunk_token_ids) + [1] + [0] * pad_length, device=text_encoder.device)
+        chunk_token_ids_tensor = torch.tensor(pre_padding + chunk_token_ids + post_padding, device=text_encoder.device)
+
+        assert chunk_token_ids_tensor.shape[0] == tokenizer.model_max_length
+        this_conditioning = text_encoder(input_ids=chunk_token_ids_tensor.unsqueeze(0),
+                                         attention_mask=chunk_mask_tensor.unsqueeze(0)
+                                         ).last_hidden_state
         conditioning = (
             this_conditioning
             if conditioning is None
@@ -46,11 +48,14 @@ def make_test_conditioning(text_encoder: DummyTransformer,
             break
 
     if pad_to_length is not None:
-        empty_token_ids = [tokenizer.bos_token_id] + [tokenizer.eos_token_id] + [tokenizer.pad_token_id] * (tokenizer.model_max_length-2)
-        empty_conditioning = text_encoder(input_ids=torch.tensor(empty_token_ids,
-                                            dtype=torch.int,
-                                            device=text_encoder.device
-                                            ).unsqueeze(0)).last_hidden_state
+        empty_token_ids = torch.tensor([tokenizer.bos_token_id] + [tokenizer.eos_token_id] +
+                                       [tokenizer.pad_token_id] * (tokenizer.model_max_length-2),
+                                       dtype=torch.int,
+                                       device=text_encoder.device
+                                       )
+        empty_mask = torch.tensor([1] + [1] + [0] * (tokenizer.model_max_length-2), device=text_encoder.device)
+        empty_conditioning = text_encoder(input_ids=empty_token_ids.unsqueeze(0),
+                                          attention_mask=empty_mask.unsqueeze(0)).last_hidden_state
         while pad_to_length > conditioning.shape[1]:
             conditioning = torch.cat([conditioning, empty_conditioning], dim=1)
 
@@ -67,13 +72,13 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
         self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 5, 4], dtype=torch.int64)))
         self.assertTrue(torch.equal(weights_tensor, torch.tensor([1.0] + [0.8] * 2 + [1.0] * 2)))
-        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 0, 0])))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 0])))
 
         prompts = ['a b c']
         token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
         self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5], dtype=torch.int64)))
         self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]))))
-        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 0])))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1])))
 
         prompts = ['']
         token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
@@ -82,7 +87,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 0, 0, 0])))
 
         prompts = []
-        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[], device='cpu')
         self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 5, 4, 4, 4], dtype=torch.int64)))
         self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] * 5))))
         self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 0, 0, 0])))
@@ -91,7 +96,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         prompts = ['a b c a b c a b c']
         token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
         self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5], dtype=torch.int64)))
-        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] * 5))))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]))))
         self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1])))
 
     def test_long_tokenizing(self):
@@ -203,6 +208,8 @@ class CompelTestCase(unittest.TestCase):
                                                                 tokenizer, [],
                                                                 pad_to_length=expected_positive_conditioning.shape[1],
                                                                 truncate=False)
+        [expected_positive_conditioning, expected_negative_conditioning] = compel.pad_conditioning_tensors_to_same_length(
+            [expected_positive_conditioning, expected_negative_conditioning])
 
         self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
                                                          expected_positive_conditioning,

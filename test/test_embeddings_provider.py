@@ -90,19 +90,19 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         fragment_weights_batch = [[1]]
         embeddings = ep.get_embeddings_for_weighted_prompt_fragments(text_batch, fragment_weights_batch)
 
+        pad_length = (max_length-2-len(KNOWN_WORDS_TOKEN_IDS))
         expected_token_ids = torch.tensor([ep.tokenizer.bos_token_id] + KNOWN_WORDS_TOKEN_IDS + [ep.tokenizer.eos_token_id] +
-                                          [ep.tokenizer.pad_token_id] * (max_length-2-len(KNOWN_WORDS_TOKEN_IDS)))
-        expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor([1] * len(expected_token_ids)))
+                                          [ep.tokenizer.pad_token_id] * pad_length)
+        expected_mask = torch.tensor([1] + [1] * len(KNOWN_WORDS_TOKEN_IDS) + [1] + [0] * pad_length)
+        expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor([1] * len(expected_token_ids)), expected_mask)
         self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
 
         # weighted fragments
         text_batch = [[KNOWN_WORDS[0], ' '.join(KNOWN_WORDS[1:3])]]
         fragment_weights_batch = [[1, 2]]
         embeddings = ep.get_embeddings_for_weighted_prompt_fragments(text_batch, fragment_weights_batch)
-        expected_token_ids = torch.tensor([ep.tokenizer.bos_token_id] + KNOWN_WORDS_TOKEN_IDS + [ep.tokenizer.eos_token_id] +
-                                          [ep.tokenizer.pad_token_id] * (max_length-2-len(KNOWN_WORDS_TOKEN_IDS)))
         expected_weights = [1] + [1] + [2, 2] + [1] * 6
-        expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor(expected_weights))
+        expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor(expected_weights), expected_mask)
         self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
 
 
@@ -119,22 +119,25 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
                              [ep.tokenizer.eos_token_id] +
                              [ep.tokenizer.pad_token_id] * (max_length-4))
         expected_weights = [1] + [1, downweighted_fragment_weight] + [1] * 7
-        # when downweighting, additionally blend against a version of the prompt without the downweighted term
-        expected_token_ids_cut = torch.tensor([ep.tokenizer.bos_token_id] + KNOWN_WORDS_TOKEN_IDS[0:1] +
-                             [ep.tokenizer.eos_token_id] +
-                             [ep.tokenizer.pad_token_id] * (max_length-3))
-        expected_weights_cut = [1] + [1] + [1] * 8
-        expected_embeddings_main_part = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor(expected_weights))
-        expected_embeddings_cut = ep.build_weighted_embedding_tensor(expected_token_ids_cut, torch.tensor(expected_weights_cut))
+        # when downweighting, additionally blend against a version of the prompt with the downweighted term masked out
+        unweighted_mask = torch.tensor([1, 1, 1, 1] + [0] * 6)
+        downweighted_fragment_dropper_mask = torch.tensor([1, 1, 0, 1] + [0] * 6)
 
+        expected_embeddings_main_part = ep.build_weighted_embedding_tensor(expected_token_ids,
+                                                                           torch.tensor(expected_weights),
+                                                                           attention_mask=unweighted_mask)
+        expected_embeddings_downweighted_dropped = ep.build_weighted_embedding_tensor(expected_token_ids,
+                                                                                      torch.tensor(expected_weights),
+                                                                                      attention_mask=downweighted_fragment_dropper_mask)
+        # use tan, like in EmbeddingsProvider.get_embeddings_for_weighted_prompt_fragments()
         downweighted_lerp_weight = math.tan((1.0 - downweighted_fragment_weight) * math.pi / 2)
         blend_weights = [1.0, downweighted_lerp_weight]
 
         expected_embeddings = EmbeddingsProvider.apply_embedding_weights(torch.cat([expected_embeddings_main_part,
-                                                                                    expected_embeddings_cut]).unsqueeze(0),
+                                                                                    expected_embeddings_downweighted_dropped]).unsqueeze(0),
                                                                          per_embedding_weights=blend_weights,
                                                                          normalize=True)
-        self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
+        self.assertTrue(torch.allclose(embeddings, expected_embeddings, atol=1e-8))
 
 
     def test_too_long_weighted_prompt_fragments_truncate(self):

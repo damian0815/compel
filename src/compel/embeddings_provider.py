@@ -104,12 +104,19 @@ class EmbeddingsProvider:
             # eg for "mountain:1 man:0.5", intuitively the "man" should be "half-gone". therefore, append an embedding
             # for "mountain" (i.e. without "man") to the already-produced embedding for "mountain man", and weight it
             # such that the resulting lerped embedding is exactly half-way between "mountain man" and "mountain".
+            fragment_token_index_ranges = self._get_token_ranges_for_fragments(tokens.tolist(), fragments)
+
             for index, fragment_weight in enumerate(weights):
                 if fragment_weight < 1:
-                    fragments_without_this = fragments[:index] + fragments[index+1:]
-                    weights_without_this = weights[:index] + weights[index+1:]
-                    tokens, per_token_weights, mask = self.get_token_ids_and_expand_weights(fragments_without_this, weights_without_this, device=device)
-                    embedding_without_this = self.build_weighted_embedding_tensor(tokens, per_token_weights)
+                    fragment_start_token_id, fragment_end_token_id = fragment_token_index_ranges[index]
+                    # mask out this fragment
+                    mask_without_fragment = mask.clone()
+                    mask_without_fragment[fragment_start_token_id:fragment_end_token_id+1] = 0
+                    # but don't mask chunk-delimiting eos/bos markers
+                    if not self.truncate_to_model_max_length:
+                        mask_without_fragment[0::self.tokenizer.model_max_length] = 1
+                        mask_without_fragment[self.tokenizer.model_max_length-1::self.tokenizer.model_max_length] = 1
+                    embedding_without_this = self.build_weighted_embedding_tensor(tokens, per_token_weights, mask_without_fragment)
 
                     embeddings = torch.cat((embeddings, embedding_without_this.unsqueeze(0)), dim=1)
                     # weight of the embedding *without* this fragment gets *stronger* as its weight approaches 0
@@ -315,3 +322,67 @@ class EmbeddingsProvider:
             chunk_start_index += chunk_size
 
         return weighted_z
+
+    def _get_token_ranges_for_fragments(self, chunked_and_padded_token_ids: List[int], fragments: List[str]) -> List[Tuple[int,int]]:
+        """
+        Match token id sequences for the strings in `fragments` with token id sequences in `chunked_and_padded_token_ids`,
+         taking into account any eos and bos markers marking `self.tokenizer.max_model_length` sized chunks.
+
+        Returns a list of tuples indicating start and end indices of each fragment's corresponding token id sequence in
+         `chunked_and_padded_token_ids`.
+        """
+        per_fragment_token_ids = self.get_token_ids(fragments, include_start_and_end_markers=False)
+        fragment_start = 0
+
+        corresponding_indices = []
+        for fragment_index, fragment_token_ids in enumerate(per_fragment_token_ids):
+            if len(fragment_token_ids) == 0:
+                corresponding_indices.append((None, None))
+                fragment_start += 1
+                continue
+            if self.truncate_to_model_max_length and fragment_start >= self.tokenizer.model_max_length - 1:
+                break
+            # find the start
+            while True:
+                if fragment_start >= len(chunked_and_padded_token_ids)-1:
+                    if self.truncate_to_model_max_length:
+                        fragment_start = len(chunked_and_padded_token_ids)-1
+                        break
+                    else:
+                        raise RuntimeError(
+                            f"couldn't find start of token sequence for fragment at index {fragment_index} '{fragments[fragment_index]}'")
+                if chunked_and_padded_token_ids[fragment_start] == fragment_token_ids[0]:
+                    break
+                fragment_start += 1
+            # step through
+            fragment_end = fragment_start
+            fragment_relative_index = 0
+            while True:
+                if fragment_end >= len(chunked_and_padded_token_ids)-1:
+                    if self.truncate_to_model_max_length:
+                        fragment_end = len(chunked_and_padded_token_ids)-1
+                        break
+                    else:
+                        raise RuntimeError(
+                            f"couldn't find end of token sequence for fragment at index {fragment_index} '{fragments[fragment_index]}'")
+                if not self.truncate_to_model_max_length and (
+                        chunked_and_padded_token_ids[fragment_end] == self.tokenizer.eos_token_id
+                        or chunked_and_padded_token_ids[fragment_end] == self.tokenizer.bos_token_id
+                ):
+                    # bos/eos: chunk boundaries
+                    fragment_end += 1
+                elif chunked_and_padded_token_ids[fragment_end] == fragment_token_ids[fragment_relative_index]:
+                    # matching token
+                    fragment_relative_index += 1
+                    if fragment_relative_index == len(fragment_token_ids):
+                        break
+                    fragment_end += 1
+                else:
+                    raise RuntimeError(
+                        f"token sequence mismatch for fragment at index {fragment_index} '{fragments[fragment_index]}':"
+                        f"expected {fragment_token_ids}, found {chunked_and_padded_token_ids[fragment_start:fragment_end + 1]}")
+
+            corresponding_indices.append((fragment_start, fragment_end))
+            fragment_start = fragment_end + 1
+
+        return corresponding_indices
