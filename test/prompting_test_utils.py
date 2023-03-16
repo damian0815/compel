@@ -15,8 +15,8 @@ class DummyEmbeddingsList(list):
         elif name == 'data':
             return self
 
-def make_dummy_embedding():
-    return torch.randn([768])
+def make_dummy_embedding(embedding_length):
+    return torch.randn([embedding_length])
 class Object(object):
     pass
 
@@ -27,8 +27,9 @@ class NullTransformer:
 
 class DummyTransformer:
 
-    def __init__(self, device="cpu"):
-        self.embeddings = DummyEmbeddingsList([make_dummy_embedding() for _ in range(len(KNOWN_WORDS)+3)])
+    def __init__(self, device="cpu", embedding_length=768):
+        self.embedding_length = embedding_length
+        self.embeddings = DummyEmbeddingsList([make_dummy_embedding(self.embedding_length) for _ in range(len(KNOWN_WORDS)+3)])
         self.device = device
 
     def resize_token_embeddings(self, new_size=None):
@@ -38,7 +39,7 @@ class DummyTransformer:
             while len(self.embeddings) > new_size:
                 self.embeddings.pop(-1)
             while len(self.embeddings) < new_size:
-                self.embeddings.append(make_dummy_embedding())
+                self.embeddings.append(make_dummy_embedding(self.embedding_length))
 
     def get_input_embeddings(self):
         return self.embeddings
@@ -82,7 +83,8 @@ class DummyTokenizer():
         tokenized = [[self.bos_token_id] + [self.tokens.index(w) for w in fragment.split(" ")] + [self.eos_token_id]
                      if len(fragment)>0 else [self.bos_token_id] + [self.eos_token_id]
                                            for fragment in fragments]
-        if kwargs.get('truncation', False):
+        default_truncation = False
+        if kwargs.get('truncation', default_truncation):
             max_length = kwargs.get('max_length', self.model_max_length)
             tokenized = [x[0:self.model_max_length-1] + [self.eos_token_id] if len(x)>max_length
                          else x
@@ -103,16 +105,3 @@ class DummyTokenizer():
             return 0
         self.tokens.append(token_str)
         return 1
-
-
-class DummyClipEmbedder:
-    def __init__(self):
-        self.max_length = 77
-        self.transformer = DummyTransformer()
-        self.tokenizer = DummyTokenizer()
-        self.position_embeddings_tensor = torch.randn([77,768], dtype=torch.float32)
-
-    def position_embedding(self, indices: Union[list,torch.Tensor]):
-        if type(indices) is list:
-            indices = torch.tensor(indices, dtype=int)
-        return torch.index_select(self.position_embeddings_tensor, 0, indices)

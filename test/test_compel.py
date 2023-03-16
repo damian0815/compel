@@ -203,6 +203,57 @@ class CompelTestCase(unittest.TestCase):
                                                          expected_negative_conditioning)
 
 
+    def test_pad_conditioning_tensors_to_same_length(self):
+        tokenizer = DummyTokenizer(model_max_length=5)
+        text_encoder = DummyTransformer(embedding_length=7)
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
+
+        embeds_a = torch.randn([1, tokenizer.model_max_length*2, text_encoder.embedding_length])
+        embeds_b = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length])
+        [padded_embeds_a, padded_embeds_b] = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
+        self.assertEqual(padded_embeds_a.shape, padded_embeds_b.shape)
+
+        embeds_a = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length])
+        embeds_b = torch.randn([1, tokenizer.model_max_length*2, text_encoder.embedding_length])
+        [padded_embeds_a, padded_embeds_b] = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
+        self.assertEqual(padded_embeds_a.shape, padded_embeds_b.shape)
+
+        embeds_a = torch.randn([tokenizer.model_max_length, text_encoder.embedding_length])
+        embeds_b = torch.randn([tokenizer.model_max_length*2, text_encoder.embedding_length])
+        [padded_embeds_a, padded_embeds_b] = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
+        self.assertEqual(padded_embeds_a.shape, padded_embeds_b.shape)
+
+        embeds_a = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length])
+        embeds_b = torch.randn([2, tokenizer.model_max_length+1, text_encoder.embedding_length])
+        with self.assertRaises(ValueError):
+            _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
+
+        embeds_a = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length+1])
+        embeds_b = torch.randn([1, tokenizer.model_max_length+1, text_encoder.embedding_length])
+        with self.assertRaises(ValueError):
+            _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
+
+        embeds_a = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length])
+        embeds_b = torch.randn([tokenizer.model_max_length+1, text_encoder.embedding_length])
+        with self.assertRaises(ValueError):
+            _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
+
+        embeds_a = torch.randn([text_encoder.embedding_length])
+        embeds_b = torch.randn([text_encoder.embedding_length])
+        with self.assertRaises(ValueError):
+            _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
+
+        embeds_a = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length])
+        embeds_b = torch.randn([text_encoder.embedding_length])
+        with self.assertRaises(ValueError):
+            _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
+
+        embeds_a = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length])
+        embeds_b = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length, 1, 1])
+        with self.assertRaises(ValueError):
+            _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
+
+
     def test_device(self):
         device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
         tokenizer = DummyTokenizer()

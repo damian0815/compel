@@ -6,9 +6,9 @@ import torch
 from src.compel.embeddings_provider import EmbeddingsProvider, DownweightMode
 from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
-def make_dummy_embeddings_provider(max_length=10, **kwargs) -> EmbeddingsProvider:
+def make_dummy_embeddings_provider(max_length=10, embedding_length=768, **kwargs) -> EmbeddingsProvider:
     tokenizer = DummyTokenizer(max_length)
-    text_encoder = DummyTransformer()
+    text_encoder = DummyTransformer(embedding_length=embedding_length)
     return EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder, **kwargs)
 
 

@@ -61,6 +61,8 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
+### 1.0.2 - fix padding for non-truncated batched embeddings (https://github.com/damian0815/compel/issues/9)
+
 ### 1.0.1 - fix for InvokeAI's `--free_gpu_mem` option
 
 ### 1.0.0 - new downweighting algorithm 

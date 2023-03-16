@@ -125,11 +125,26 @@ class Compel:
         This is a problem when using a negative and a positive prompt to condition the diffusion process. This function
         pads either c0 or c1 if necessary to ensure they both have the same length, returning the padded c0 and c1.
         """
-        max_conditioning_tensor_length = max([c.shape[1] for c in conditionings])
+        c0_shape = conditionings[0].shape
+        if not all([len(c.shape) == len(c0_shape) for c in conditionings]):
+            raise ValueError("Conditioning tensors must all have either 2 dimensions (unbatched) or 3 dimensions (batched)")
+
+        if len(c0_shape) == 2:
+            # need to be unsqueezed
+            conditionings = [c.unsqueeze(0) for c in conditionings]
+            c0_shape = conditionings[0].shape
+        if len(c0_shape) != 3:
+            raise ValueError(f"All conditioning tensors must have the same number of dimensions (2 or 3)")
+
+        if not all([c.shape[0] == c0_shape[0] and c.shape[2] == c0_shape[2] for c in conditionings]):
+            raise ValueError(f"All conditioning tensors must have the same batch size ({c0_shape[0]}) and number of embeddings per token ({c0_shape[1]}")
+
+
+        max_token_count = max([c.shape[1] for c in conditionings])
         # if necessary, pad shorter tensors out with an emptystring tensor
-        empty_z = self.build_conditioning_tensor("")
+        empty_z = torch.cat([self.build_conditioning_tensor("")] * c0_shape[0])
         for i, c in enumerate(conditionings):
-            while c.shape[1] < max_conditioning_tensor_length:
+            while c.shape[1] < max_token_count:
                 c = torch.cat([c, empty_z], dim=1)
             conditionings[i] = c
         return conditionings
