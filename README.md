@@ -61,6 +61,8 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
+### 1.0.1 - fix for InvokeAI's `--free_gpu_mem` option
+
 ### 1.0.0 - new downweighting algorithm 
 
 Downweighting now works by applying an attention mask to remove the downweighted tokens, rather than literally removing them from the sequence. This behaviour is the default, but the old behaviour can be re-enabled by passing `downweight_mode=DownweightMode.REMOVE` on init of the `Compel` instance.
