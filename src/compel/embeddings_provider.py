@@ -329,7 +329,7 @@ class EmbeddingsProvider:
                 else None
             )
 
-            z = self.text_encoder(chunk_token_ids, attention_mask=chunk_attention_mask, return_dict=False)[0]
+            z = self.text_encoder(chunk_token_ids, chunk_attention_mask, return_dict=False)[0]
             batch_weights_expanded = chunk_per_token_weights.reshape(
                 chunk_per_token_weights.shape + (1,)).expand(z.shape).to(z)
 
