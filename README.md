@@ -61,9 +61,11 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
-### 1.0.2 - fix padding for non-truncated batched embeddings (https://github.com/damian0815/compel/issues/9)
+#### 1.0.3 - better defaults for .swap (https://github.com/damian0815/compel/issues/8)
 
-### 1.0.1 - fix for InvokeAI's `--free_gpu_mem` option
+#### 1.0.2 - fix padding for non-truncated batched embeddings (https://github.com/damian0815/compel/issues/9)
+
+#### 1.0.1 - fix for InvokeAI's `--free_gpu_mem` option
 
 ### 1.0.0 - new downweighting algorithm 
 
@@ -90,9 +92,9 @@ negative_conditioning = compel.build_conditioning_tensor(negative_prompt)
 [conditioning, negative_conditioning] = compel.pad_conditioning_tensors_to_same_length([conditioning, negative_conditioning])
 ```
 
-### 0.1.9 - broken
+#### 0.1.9 - broken
 
-### 0.1.8 - downgrade Python min version to 3.7
+#### 0.1.8 - downgrade Python min version to 3.7
 
-### 0.1.7 - InvokeAI compatibility
+#### 0.1.7 - InvokeAI compatibility
 
