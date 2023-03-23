@@ -266,7 +266,7 @@ class EmbeddingsProvider:
             # (typically self.max_length == 77)
             chunk_token_ids = [self.tokenizer.bos_token_id] + chunk_token_ids + [self.tokenizer.eos_token_id]
             chunk_token_weights = [1.0] + chunk_token_weights + [1.0]
-            chunk_mask = [1.0] * len(chunk_token_ids)
+            chunk_mask = [1] * len(chunk_token_ids)
 
             pad_length = self.max_token_count - len(chunk_token_ids)
             chunk_token_ids += [self.tokenizer.pad_token_id] * pad_length
