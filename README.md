@@ -61,6 +61,8 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
+#### 1.0.4 - fix embeddings for empty swap target (eg `cat.swap("")`) when truncation is disabled 
+
 #### 1.0.3 - better defaults for .swap (https://github.com/damian0815/compel/issues/8)
 
 #### 1.0.2 - fix padding for non-truncated batched embeddings (https://github.com/damian0815/compel/issues/9)
