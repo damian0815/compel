@@ -359,7 +359,6 @@ class EmbeddingsProvider:
         for fragment_index, fragment_token_ids in enumerate(per_fragment_token_ids):
             if len(fragment_token_ids) == 0:
                 corresponding_indices.append((None, None))
-                fragment_start += 1
                 continue
             if self.truncate_to_model_max_length and fragment_start >= self.tokenizer.model_max_length - 1:
                 break

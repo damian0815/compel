@@ -301,7 +301,12 @@ class CompelTestCase(unittest.TestCase):
                                        atol=1e-6))
 
 
+    def test_empty_swap(self):
 
+        tokenizer = DummyTokenizer()
+        text_encoder = DummyTransformer()
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
+        conditioning = compel.build_conditioning_tensor("c (a).swap("") b")
 
 if __name__ == '__main__':
     unittest.main()
