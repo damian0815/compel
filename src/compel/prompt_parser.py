@@ -592,9 +592,11 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
     cross_attention_substitute.set_debug(False)
     cross_attention_substitute.set_parse_action(make_operator_object)
 
-    lora_weight = "withLora" + lparen + keyword + pp.Optional(comma + number) + rparen
-    lora_weight.set_name('lora_weight')
-    lora_weight.set_parse_action(lambda x: LoraWeight(model=x[1], weight=x[2]))
+    lora_weight = ("withLora" + lparen + keyword +
+                   pp.Optional(comma + number).set_name('lora_weight').set_debug(False)
+                   + rparen)
+    lora_weight.set_name('lora').set_debug(False)
+    lora_weight.set_parse_action(lambda x: LoraWeight(model=x[1], weight=(x[2] if len(x) > 2 else 1)))
 
     # an entire self-contained prompt, which can be used in a Blend or Conjunction
     prompt = pp.ZeroOrMore(pp.MatchFirst([

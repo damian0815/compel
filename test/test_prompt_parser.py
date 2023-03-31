@@ -525,6 +525,8 @@ class PromptParserTestCase(unittest.TestCase):
     def test_lora(self):
         self.assertNotEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])]),
                          parse_prompt("mountain man withLora(hairy, 0.5)", verbose=False))
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0), LoraWeight('hairy', 1)])]),
+                         parse_prompt("mountain man withLora(hairy)", verbose=False))
         self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0), LoraWeight('hairy', 0.5)])]),
                          parse_prompt("mountain man withLora(hairy, 0.5)", verbose=False))
         self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0), LoraWeight('hairy', 0.5)])]),
