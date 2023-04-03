@@ -496,8 +496,9 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
 
     # a word that absolutely does not contain any meaningful syntax
     non_syntax_word = pp.Combine(pp.OneOrMore(pp.MatchFirst([
-            pp.Or(syntactic_symbols.values()),
+            pp.Or(syntactic_symbols.values()), # escaped syntactic symbols
             pp.one_of(['-', '+']) + pp.NotAny(pp.White() | pp.Char(syntactic_chars) | pp.StringEnd()),
+            number,
             # build character-by-character
             pp.CharsNotIn(string.whitespace + syntactic_chars, exact=1)
         ])))
