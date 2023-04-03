@@ -61,6 +61,10 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
+#### 1.0.5 - fix incorrect parsing when passing invalid (auto1111) syntax that has a float
+
+also fix test case for default swap parameters
+
 #### 1.0.4 - fix embeddings for empty swap target (eg `cat.swap("")`) when truncation is disabled 
 
 #### 1.0.3 - better defaults for .swap (https://github.com/damian0815/compel/issues/8)

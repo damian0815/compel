@@ -301,12 +301,21 @@ class CompelTestCase(unittest.TestCase):
                                        atol=1e-6))
 
 
-    def test_empty_swap(self):
 
-        tokenizer = DummyTokenizer()
+    def test_long_bad_prompt(self):
+        max_length = 5
+        tokenizer = DummyTokenizer(model_max_length=max_length)
         text_encoder = DummyTransformer()
         compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
-        conditioning = compel.build_conditioning_tensor("c (a).swap("") b")
+
+        positive_prompt = "a b c withLora(something)"
+        negative_prompt = '("a b c a b c a b", "c").blend()'
+        positive_conditioning = compel.build_conditioning_tensor(positive_prompt)
+        negative_conditioning = compel.build_conditioning_tensor(negative_prompt)
+
+
+
+
 
 if __name__ == '__main__':
     unittest.main()
