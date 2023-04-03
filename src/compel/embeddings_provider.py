@@ -50,7 +50,7 @@ class EmbeddingsProvider:
 
 
     @property
-    def max_token_count(self) -> int:
+    def model_max_length(self) -> int:
         return self.tokenizer.model_max_length
 
 
@@ -249,7 +249,7 @@ class EmbeddingsProvider:
 
         remaining_token_ids = token_ids
         remaining_token_weights = token_weights
-        chunk_length_without_eos_bos_markers = self.max_token_count - 2
+        chunk_length_without_eos_bos_markers = self.model_max_length - 2
 
         all_token_ids = []
         all_token_weights = []
@@ -268,7 +268,7 @@ class EmbeddingsProvider:
             chunk_token_weights = [1.0] + chunk_token_weights + [1.0]
             chunk_mask = [1] * len(chunk_token_ids)
 
-            pad_length = self.max_token_count - len(chunk_token_ids)
+            pad_length = self.model_max_length - len(chunk_token_ids)
             chunk_token_ids += [self.tokenizer.pad_token_id] * pad_length
             chunk_token_weights += [1.0] * pad_length
             chunk_mask += [self.padding_attention_mask_value] * pad_length
@@ -307,18 +307,18 @@ class EmbeddingsProvider:
             where `token_dim` is 768 for SD1 and 1280 for SD2.
         """
         # print(f"building weighted embedding tensor for {tokens} with weights {token_weights}")
-        if token_ids.shape[0] % self.max_token_count != 0:
-            raise ValueError(f"token_ids has shape {token_ids.shape} - expected a multiple of {self.max_token_count}")
+        if token_ids.shape[0] % self.model_max_length != 0:
+            raise ValueError(f"token_ids has shape {token_ids.shape} - expected a multiple of {self.model_max_length}")
 
         chunk_start_index = 0
         empty_token_ids = torch.tensor([self.tokenizer.bos_token_id] +
                                        [self.tokenizer.eos_token_id] +
-                                       [self.tokenizer.pad_token_id] * (self.max_token_count - 2),
+                                       [self.tokenizer.pad_token_id] * (self.model_max_length - 2),
                                        dtype=torch.int, device=self.text_encoder.device).unsqueeze(0)
         empty_z = self.text_encoder(empty_token_ids, return_dict=False)[0]
         weighted_z = None
 
-        chunk_size = self.max_token_count
+        chunk_size = self.model_max_length
         while chunk_start_index < token_ids.shape[0]:
             next_chunk_start_index = chunk_start_index+chunk_size
             chunk_per_token_weights = per_token_weights[chunk_start_index:next_chunk_start_index]
@@ -377,6 +377,7 @@ class EmbeddingsProvider:
             # step through
             fragment_end = fragment_start
             fragment_relative_index = 0
+            max_length = self.model_max_length
             while True:
                 if fragment_end >= len(chunked_and_padded_token_ids)-1:
                     if self.truncate_to_model_max_length:
@@ -386,8 +387,8 @@ class EmbeddingsProvider:
                         raise RuntimeError(
                             f"couldn't find end of token sequence for fragment at index {fragment_index} '{fragments[fragment_index]}'")
                 if not self.truncate_to_model_max_length and (
-                        chunked_and_padded_token_ids[fragment_end] == self.tokenizer.eos_token_id
-                        or chunked_and_padded_token_ids[fragment_end] == self.tokenizer.bos_token_id
+                        (((fragment_end % max_length) == max_length-1) and chunked_and_padded_token_ids[fragment_end] == self.tokenizer.eos_token_id)
+                        or (((fragment_end % max_length) == 0) and chunked_and_padded_token_ids[fragment_end] == self.tokenizer.bos_token_id)
                 ):
                     # bos/eos: chunk boundaries
                     fragment_end += 1

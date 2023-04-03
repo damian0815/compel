@@ -215,6 +215,24 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
 
 
+    def test_include_eos_bos_in_prompt(self):
+        max_length = 5
+        ep = make_dummy_embeddings_provider(max_length=max_length, truncate=False, padding_attention_mask_value=0)
+
+        text_batch = [[KNOWN_WORDS[0] + ' <|eos|> <|bos|> '
+                       + KNOWN_WORDS[1]]]
+        fragment_weights_batch = [[1]]
+        embeddings = ep.get_embeddings_for_weighted_prompt_fragments(text_batch, fragment_weights_batch)
+
+        expected_token_ids = torch.tensor([ep.tokenizer.bos_token_id] +
+                                          [KNOWN_WORDS_TOKEN_IDS[0], ep.tokenizer.eos_token_id, ep.tokenizer.bos_token_id] +
+                                          [ep.tokenizer.eos_token_id] +
+                                          [ep.tokenizer.bos_token_id] +
+                                          [KNOWN_WORDS_TOKEN_IDS[1]] + [ep.tokenizer.pad_token_id] * 2 +
+                                          [ep.tokenizer.eos_token_id]
+                                          )
+        expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor([1] * len(expected_token_ids)))
+        self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
 
 
 if __name__ == '__main__':
