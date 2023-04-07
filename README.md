@@ -61,6 +61,10 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
+#### 1.1.0 - fix for parsing loras in combination with blends
+
+`LoraWeight`s are now returned on the `Conjunction` object
+
 #### 1.0.5 - fix incorrect parsing when passing invalid (auto1111) syntax that has a float
 
 also fix test case for default swap parameters
