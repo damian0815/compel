@@ -547,18 +547,25 @@ class PromptParserTestCase(unittest.TestCase):
     def test_lora(self):
         self.assertNotEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])]),
                          parse_prompt("mountain man withLora(hairy, 0.5)", verbose=False))
-        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0), LoraWeight('hairy', 1)])]),
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 1)]),
                          parse_prompt("mountain man withLora(hairy)", verbose=False))
-        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0), LoraWeight('hairy', 0.5)])]),
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 0.5)]),
                          parse_prompt("mountain man withLora(hairy, 0.5)", verbose=False))
-        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0), LoraWeight('hairy', 0.5)])]),
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 0.5)]),
                          parse_prompt("withLora(hairy, 0.5) mountain man", verbose=False))
-        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0), LoraWeight('hairy', 0.5)])]),
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 0.5)]),
                          parse_prompt("mountain withLora(hairy, 0.5) man", verbose=False))
-        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0),
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[
                                                        LoraWeight('hairy', 0.5),
-                                                       LoraWeight('ugly', 0.2)])]),
+                                                       LoraWeight('ugly', 0.2)]),
                          parse_prompt("mountain withLora(hairy, 0.5) man withLora(ugly, 0.2)", verbose=False))
+
+    def test_blend_and_lora(self):
+        self.assertEqual(Conjunction([Blend([FlattenedPrompt([("mountain", 1.0)]), FlattenedPrompt([("man", 1.0)])],
+                                            [1.0,1.0])],
+                                            lora_weights=[LoraWeight('hairy', 0.5)]),
+                         parse_prompt('("mountain", "man").blend() withLora(hairy, 0.5)',
+                         verbose=False))
 
 
     def test_single(self):
@@ -570,7 +577,9 @@ class PromptParserTestCase(unittest.TestCase):
                                                            [Fragment("skateboard", pow(1.1, 2))])
                                                        ])
                                       ], weights=[0.5, 0.5]),
-                         parse_prompt("(\"mountain man\", \"a person with a hat (riding a bicycle.swap(skateboard))++\").and(0.5, 0.5)"))
+                         parse_prompt(
+                             "(\"mountain man\", \"a person with a hat (riding a bicycle.swap(skateboard))++\").and(0.5, 0.5)"
+                         ))
         pass
 
 
