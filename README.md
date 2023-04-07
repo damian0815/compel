@@ -61,10 +61,10 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
-#### 1.1.0 - final `withLora`/`useLora` support
+#### 1.1.0 - support for parsing `withLora`/`useLora` on `parse_prompt_string()`.
 
 * `Compel.parse_prompt_string()` now returns a `Conjunction`
-* `withLora(name[, weight])` or `useLora(name[, weight])` is parsed to `LoraWeight` instances and returned on the `Conjunction`.
+* any appearances of `withLora(name[, weight])` or `useLora(name[, weight])` anywhere in the prompt string will be parsed to `LoraWeight` instances, and returned on the outermost `Conjunction` returned by `parse_prompt_string()`.
 
 #### 1.0.5 - fix incorrect parsing when passing invalid (auto1111) syntax that has a float
 
