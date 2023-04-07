@@ -7,7 +7,7 @@ from transformers import CLIPTokenizer, CLIPTextModel
 from . import cross_attention_control
 from .conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
 from .embeddings_provider import EmbeddingsProvider, BaseTextualInversionManager, DownweightMode
-from .prompt_parser import Blend, FlattenedPrompt, PromptParser, CrossAttentionControlSubstitute
+from .prompt_parser import Blend, FlattenedPrompt, PromptParser, CrossAttentionControlSubstitute, Conjunction
 
 __all__ = ["Compel", "DownweightMode"]
 
@@ -66,7 +66,10 @@ class Compel:
                                            negative_conditioning=negative_conditioning)
 
     def build_conditioning_tensor(self, text: str) -> torch.Tensor:
-        prompt_object = self.parse_prompt_string(text)
+        conjunction = self.parse_prompt_string(text)
+        if len(conjunction.prompts)>1:
+            raise ValueError("Conjunctions of >1 prompt are currently not supported by build_conditioning_tensor()")
+        prompt_object = conjunction.prompts[0]
         conditioning, _ = self.build_conditioning_tensor_for_prompt_object(prompt_object)
         return conditioning
 
@@ -84,12 +87,10 @@ class Compel:
         return cond_tensor
 
     @classmethod
-    def parse_prompt_string(cls, prompt_string: str) -> Union[FlattenedPrompt, Blend]:
+    def parse_prompt_string(cls, prompt_string: str) -> Conjunction:
         pp = PromptParser()
         conjunction = pp.parse_conjunction(prompt_string)
-        # we don't support conjunctions for now
-        parsed_prompt = conjunction.prompts[0]
-        return parsed_prompt
+        return conjunction
 
     def describe_tokenization(self, text: str) -> List[str]:
         """

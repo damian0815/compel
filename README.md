@@ -63,7 +63,8 @@ images[1].save("image1.jpg")
 
 #### 1.1.0 - fix for parsing loras in combination with blends
 
-`LoraWeight`s are now returned on the `Conjunction` object
+* `Compel.parse_prompt_string()` now returns a `Conjunction`
+* `LoraWeight`s are now returned on the `Conjunction` object rather than on any of its component `FlattendPrompt` objects
 
 #### 1.0.5 - fix incorrect parsing when passing invalid (auto1111) syntax that has a float
 
