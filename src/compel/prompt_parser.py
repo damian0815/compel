@@ -531,9 +531,11 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
     cross_attention_substitute = pp.Forward()
     parenthesized_fragment = pp.Forward()
     quoted_fragment = pp.Forward()
+    lora_weight = pp.Forward()
 
     # the types of things that can go into a fragment, consisting of syntax-full and/or strictly syntax-free components
     fragment_part_expressions = [
+        lora_weight,
         attention,
         cross_attention_substitute,
         parenthesized_fragment,
@@ -608,7 +610,7 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
     cross_attention_substitute.set_parse_action(make_operator_object)
 
     lora_trigger_term = pp.Literal("useLora") | pp.Literal("withLora")
-    lora_weight = (lora_trigger_term + lparen
+    lora_weight << (lora_trigger_term + lparen
                    + keyword # lora name
                    + pp.Optional(comma + number).set_name('lora_weight').set_debug(False)
                    + rparen)
