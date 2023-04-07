@@ -549,6 +549,10 @@ class PromptParserTestCase(unittest.TestCase):
                          parse_prompt("mountain man withLora(hairy, 0.5)", verbose=False))
         self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 1)]),
                          parse_prompt("mountain man withLora(hairy)", verbose=False))
+        self.assertNotEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])]),
+                         parse_prompt("mountain man useLora(hairy, 0.5)", verbose=False))
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 1)]),
+                         parse_prompt("mountain man useLora(hairy)", verbose=False))
         self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 0.5)]),
                          parse_prompt("mountain man withLora(hairy, 0.5)", verbose=False))
         self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 0.5)]),

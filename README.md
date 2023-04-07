@@ -61,10 +61,10 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
-#### 1.1.0 - fix for parsing loras in combination with blends
+#### 1.1.0 - final `withLora`/`useLora` support
 
 * `Compel.parse_prompt_string()` now returns a `Conjunction`
-* `LoraWeight`s are now returned on the `Conjunction` object rather than on any of its component `FlattendPrompt` objects
+* `withLora(name[, weight])` or `useLora(name[, weight])` is parsed to `LoraWeight` instances and returned on the `Conjunction`.
 
 #### 1.0.5 - fix incorrect parsing when passing invalid (auto1111) syntax that has a float
 
