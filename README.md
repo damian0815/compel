@@ -63,6 +63,8 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
+#### 1.1.1 - fix for #22 (issues parsing `.` characters inside parentheses)
+
 #### 1.1.0 - support for parsing `withLora`/`useLora` on `parse_prompt_string()`.
 
 * `Compel.parse_prompt_string()` now returns a `Conjunction`
