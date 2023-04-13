@@ -543,9 +543,9 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
         non_syntax_word
     ]
     # a fragment that is permitted to contain commas
-    fragment_including_commas = pp.ZeroOrMore(pp.MatchFirst(
+    fragment_including_commas_or_periods = pp.ZeroOrMore(pp.MatchFirst(
         fragment_part_expressions + [
-            pp.Literal(',').set_parse_action(lambda x: Fragment(x[0]))
+            (pp.Literal(',') | pp.Literal('.')).set_parse_action(lambda x: Fragment(x[0]))
         ]
     ))
     # a fragment that is not permitted to contain commas
@@ -555,10 +555,10 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
 
     # a fragment in double quotes (may be nested)
     quoted_fragment << pp.QuotedString(quote_char='"', esc_char=None, esc_quote='\\"')
-    quoted_fragment.set_parse_action(lambda x: parse_fragment_str(x, fragment_including_commas, in_quotes=True))
+    quoted_fragment.set_parse_action(lambda x: parse_fragment_str(x, fragment_including_commas_or_periods, in_quotes=True))
 
     # a fragment inside parentheses (may be nested)
-    parenthesized_fragment << (lparen + fragment_including_commas + rparen)
+    parenthesized_fragment << (lparen + fragment_including_commas_or_periods + rparen)
     parenthesized_fragment.set_name('parenthesized_fragment')
     parenthesized_fragment.set_debug(False)
 
