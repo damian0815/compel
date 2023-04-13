@@ -20,7 +20,8 @@ def make_test_conditioning(text_encoder: DummyTransformer,
                            tokenizer: DummyTokenizer,
                            token_ids: List[int],
                            truncate: bool=True,
-                           pad_mask_value: int=1
+                           pad_mask_value: int=1,
+                           use_penultimate_clip_layer: bool=False
                            ) -> torch.Tensor:
     remaining_tokens = token_ids.copy()
     conditioning = None
@@ -36,9 +37,15 @@ def make_test_conditioning(text_encoder: DummyTransformer,
         chunk_token_ids_tensor = torch.tensor(pre_padding + chunk_token_ids + post_padding, device=text_encoder.device)
 
         assert chunk_token_ids_tensor.shape[0] == tokenizer.model_max_length
-        this_conditioning = text_encoder(input_ids=chunk_token_ids_tensor.unsqueeze(0),
+        text_encoder_output = text_encoder(input_ids=chunk_token_ids_tensor.unsqueeze(0),
                                          attention_mask=chunk_mask_tensor.unsqueeze(0)
-                                         ).last_hidden_state
+                                         )
+        if use_penultimate_clip_layer:
+            penultimate_hidden_state = text_encoder_output.hidden_states[-2]
+            this_conditioning = text_encoder.text_model.final_layer_norm(penultimate_hidden_state)
+        else:
+            this_conditioning = text_encoder_output.last_hidden_state
+        # handle batch input
         conditioning = (
             this_conditioning
             if conditioning is None
@@ -48,88 +55,6 @@ def make_test_conditioning(text_encoder: DummyTransformer,
             break
 
     return conditioning
-
-
-class EmbeddingsProviderTestCase(unittest.TestCase):
-
-    def test_tokenizing(self):
-        tokenizer = DummyTokenizer(model_max_length=5)
-        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer(), padding_attention_mask_value=0)
-
-        prompts = ['a b']
-        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
-        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 5, 4], dtype=torch.int64)))
-        self.assertTrue(torch.equal(weights_tensor, torch.tensor([1.0] + [0.8] * 2 + [1.0] * 2)))
-        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 0])))
-
-        prompts = ['a b c']
-        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
-        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5], dtype=torch.int64)))
-        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]))))
-        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1])))
-
-        prompts = ['']
-        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
-        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 5, 4, 4, 4], dtype=torch.int64)))
-        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] * 5))))
-        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 0, 0, 0])))
-
-        prompts = []
-        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[], device='cpu')
-        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 5, 4, 4, 4], dtype=torch.int64)))
-        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] * 5))))
-        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 0, 0, 0])))
-
-        # truncation
-        prompts = ['a b c a b c a b c']
-        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
-        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5], dtype=torch.int64)))
-        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]))))
-        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1])))
-
-    def test_long_tokenizing(self):
-        tokenizer = DummyTokenizer(model_max_length=5)
-        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer(), truncate=False, padding_attention_mask_value=0)
-
-        prompts = ['a b c c b a a c b']
-        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
-        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5] + [3, 2, 1, 0, 5] + [3, 0, 2, 1, 5], dtype=torch.int64)))
-        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]) * 3)))
-        self.assertTrue(torch.equal(mask, torch.tensor(([1, 1, 1, 1, 1] * 3))))
-
-        prompts = ['a b c c b a a c b a']
-        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts, weights=[0.8], device='cpu')
-        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5, 3, 2, 1, 0, 5, 3, 0, 2, 1, 5, 3, 0, 5, 4, 4], dtype=torch.int64)))
-        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]) * 3 + ([1.0] + [0.8] + [1.0]) + ([1.0] * 2))))
-        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1] * 3 + [1, 1, 1] + [0, 0])))
-
-
-    def test_tokenize_to_mask(self):
-        tokenizer = DummyTokenizer(model_max_length=7)
-        text_encoder = DummyTransformer()
-        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder, padding_attention_mask_value=0)
-
-        fragments = ['a b']
-        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1]*len(fragments), device='cpu')
-        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 0, 0, 0])
-
-        fragments = ['a b c a b c a']
-        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1]*len(fragments), device='cpu')
-        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 1, 1, 1])
-
-        fragments = ['a', 'b c']
-        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1, 2], device='cpu')
-        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 1, 0, 0])
-
-        # eos/bos only
-        fragments = []
-        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1]*len(fragments), device='cpu')
-        self.assertSequenceEqual(mask.tolist(), [1, 1, 0, 0, 0, 0, 0])
-
-        # too long
-        fragments = ['a b c a b c a b c a b c']
-        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1]*len(fragments), device='cpu')
-        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 1, 1, 1])
 
 
 class CompelTestCase(unittest.TestCase):
@@ -142,13 +67,11 @@ class CompelTestCase(unittest.TestCase):
 
         # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
         prompt = " ".join(KNOWN_WORDS[:3])
-        conditioning_scheduler = compel.make_conditioning_scheduler(prompt)
-        conditioning_scheduler_2 = compel.make_conditioning_scheduler(prompt)
-        expected_positive_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3])
-        expected_negative_conditioning = make_test_conditioning(text_encoder, tokenizer, [])
-        self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
-                                                         expected_positive_conditioning,
-                                                         expected_negative_conditioning)
+        conditioning = compel(prompt)
+        expected_conditioning = make_test_conditioning(text_encoder, tokenizer, KNOWN_WORDS_TOKEN_IDS[:3])
+        self.assertTrue(torch.allclose(expected_conditioning,
+                                       conditioning,
+                                       atol=1e-6))
 
 
     def test_basic_negative_prompt(self):
@@ -166,6 +89,27 @@ class CompelTestCase(unittest.TestCase):
         self.assert_constant_scheduling_matches_expected(conditioning_scheduler,
                                                          expected_positive_conditioning,
                                                          expected_negative_conditioning)
+
+    def test_use_penultimate_layer(self):
+        tokenizer = DummyTokenizer()
+        text_encoder = DummyTransformer()
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, use_penultimate_clip_layer=True)
+
+        # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
+        prompt = " ".join(KNOWN_WORDS[:3])
+        conditioning = compel(prompt)
+        expected_conditioning = make_test_conditioning(text_encoder, tokenizer,
+                                                       KNOWN_WORDS_TOKEN_IDS[:3],
+                                                       use_penultimate_clip_layer=True)
+        self.assertTrue(torch.allclose(expected_conditioning,
+                                       conditioning,
+                                       atol=1e-6))
+        expected_conditioning_no_penultimate = make_test_conditioning(text_encoder, tokenizer,
+                                                       KNOWN_WORDS_TOKEN_IDS[:3],
+                                                       use_penultimate_clip_layer=False)
+        self.assertFalse(torch.allclose(expected_conditioning_no_penultimate,
+                                       conditioning,
+                                       atol=1e-6))
 
     def test_too_long_prompt_truncate(self):
         tokenizer = DummyTokenizer()

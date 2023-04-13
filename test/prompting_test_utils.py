@@ -1,6 +1,8 @@
 from typing import Union, Optional
+from unittest.mock import Mock, MagicMock
 
 import torch
+from torch import nn
 
 KNOWN_WORDS = ['a', 'b', 'c']
 KNOWN_WORDS_TOKEN_IDS = [0, 1, 2]
@@ -27,7 +29,8 @@ class NullTransformer:
 
 class DummyTransformer:
 
-    def __init__(self, device="cpu", embedding_length=768):
+    def __init__(self, device="cpu", text_model_max_length=77, embedding_length=768):
+        self.text_model_max_length = text_model_max_length
         self.embedding_length = embedding_length
         self.embeddings = DummyEmbeddingsList([make_dummy_embedding(self.embedding_length) for _ in range(len(KNOWN_WORDS)+3)])
         self.device = device
@@ -64,11 +67,22 @@ class DummyTransformer:
                 assert item == 0
                 return self.last_hidden_state
 
+            @property
+            def hidden_states(self):
+                return [-self.last_hidden_state, self.last_hidden_state]
+
         o = EmbeddingsObject(embeddings)
         return o
 
     def __call__(self, input_ids, attention_mask=None, **kwargs):
         return self.forward(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
+
+    @property
+    def text_model(self):
+        tm = Mock()
+        tm.final_layer_norm = nn.LayerNorm(normalized_shape=[self.text_model_max_length, self.embedding_length])
+        return tm
+
 
 class DummyTokenizer():
     def __init__(self, model_max_length=77):

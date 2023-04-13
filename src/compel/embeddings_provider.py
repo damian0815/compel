@@ -27,7 +27,8 @@ class EmbeddingsProvider:
                  dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
                  truncate: bool = True,
                  padding_attention_mask_value: int = 1,
-                 downweight_mode: DownweightMode = DownweightMode.MASK
+                 downweight_mode: DownweightMode = DownweightMode.MASK,
+                 use_penultimate_clip_layer: bool=False
                  ):
         """
         `tokenizer`: converts strings to lists of int token ids
@@ -37,6 +38,10 @@ class EmbeddingsProvider:
         `truncate`: if True, truncate inputs to the maximum length specified by the tokenizer. if False, returns
                     tensors that may be longer than the maximum length (but will always be an integer multiple of maximum length)
         `padding_attention_mask_value`: Value to write into the attention mask for padding tokens. Stable Diffusion needs 1.
+        `downweight_mode`: if MASK, downweight by blending with a version of the prompt with the downweighted terms masked out.
+                    if REMOVE, the blend is against a version of the prompt with the downweighted tokens removed
+        `use_penultimate_clip_layer`: Whether to tuse the penultimate hidden state output of the CLIP emcoder (True) or
+                    the final hidden state output (False, default).
         """
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
@@ -44,6 +49,7 @@ class EmbeddingsProvider:
         self.truncate_to_model_max_length = truncate
         self.padding_attention_mask_value = padding_attention_mask_value
         self.downweight_mode = downweight_mode
+        self.use_penultimate_clip_layer = use_penultimate_clip_layer
 
         # by default always use float32
         self.get_dtype_for_device = dtype_for_device_getter
@@ -70,7 +76,7 @@ class EmbeddingsProvider:
                                                      text_batch: List[List[str]],
                                                      fragment_weights_batch: List[List[float]],
                                                      should_return_tokens: bool = False,
-                                                     device='cpu',
+                                                     device='cpu'
                                  ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
 
@@ -129,15 +135,16 @@ class EmbeddingsProvider:
                             # but don't mask chunk-delimiting eos/bos markers
                             mask_without_fragment[0::self.tokenizer.model_max_length] = 1
                             mask_without_fragment[self.tokenizer.model_max_length-1::self.tokenizer.model_max_length] = 1
-                        embedding_without_this = self.build_weighted_embedding_tensor(tokens, per_token_weights, mask_without_fragment)
+                        embedding_without_this = self.build_weighted_embedding_tensor(tokens,
+                                                                                      per_token_weights,
+                                                                                      mask_without_fragment)
                     else:
                         fragments_without_this = fragments[0:index] + fragments[index+1:]
                         weights_without_this = weights[0:index] + weights[index+1:]
                         tokens_without_fragment, per_token_weights_without_fragment, mask_without_fragment = \
                             self.get_token_ids_and_expand_weights(fragments_without_this, weights_without_this, device=device)
                         embedding_without_this = self.build_weighted_embedding_tensor(tokens_without_fragment,
-                                                                                      per_token_weights_without_fragment,
-                                                                                      mask_without_fragment)
+                                                                                      per_token_weights_without_fragment)
 
                     embeddings = torch.cat((embeddings, embedding_without_this.unsqueeze(0)), dim=1)
                     # weight of the embedding *without* this fragment gets *stronger* as its weight approaches 0
@@ -315,7 +322,7 @@ class EmbeddingsProvider:
                                        [self.tokenizer.eos_token_id] +
                                        [self.tokenizer.pad_token_id] * (self.max_token_count - 2),
                                        dtype=torch.int, device=self.text_encoder.device).unsqueeze(0)
-        empty_z = self.text_encoder(empty_token_ids, return_dict=False)[0]
+        empty_z = self._encode_token_ids_to_embeddings(empty_token_ids)
         weighted_z = None
 
         chunk_size = self.max_token_count
@@ -329,7 +336,7 @@ class EmbeddingsProvider:
                 else None
             )
 
-            z = self.text_encoder(chunk_token_ids, chunk_attention_mask, return_dict=False)[0]
+            z = self._encode_token_ids_to_embeddings(chunk_token_ids, chunk_attention_mask)
             batch_weights_expanded = chunk_per_token_weights.reshape(
                 chunk_per_token_weights.shape + (1,)).expand(z.shape).to(z)
 
@@ -343,6 +350,20 @@ class EmbeddingsProvider:
             chunk_start_index += chunk_size
 
         return weighted_z
+
+    def _encode_token_ids_to_embeddings(self, token_ids: torch.Tensor,
+                                        attention_mask: Optional[torch.Tensor]=None) -> torch.Tensor:
+        text_encoder_output = self.text_encoder(token_ids,
+                                                attention_mask,
+                                                output_hidden_states=self.use_penultimate_clip_layer,
+                                                return_dict=True)
+        if self.use_penultimate_clip_layer:
+            # needs normalizing
+            penultimate_hidden_state = text_encoder_output.hidden_states[-2]
+            return self.text_encoder.text_model.final_layer_norm(penultimate_hidden_state)
+        else:
+            # already normalized
+            return text_encoder_output.last_hidden_state
 
     def _get_token_ranges_for_fragments(self, chunked_and_padded_token_ids: List[int], fragments: List[str]) -> List[Tuple[int, int]]:
         """

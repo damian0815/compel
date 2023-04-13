@@ -26,7 +26,9 @@ class Compel:
                  dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
                  truncate_long_prompts: bool = True,
                  padding_attention_mask_value: int = 1,
-                 downweight_mode: DownweightMode = DownweightMode.MASK):
+                 downweight_mode: DownweightMode = DownweightMode.MASK,
+                 use_penultimate_clip_layer: bool=False
+                 ):
         """
         Initialize Compel. The tokenizer and text_encoder can be lifted directly from any DiffusionPipeline.
 
@@ -42,6 +44,9 @@ class Compel:
         `padding_attention_mask_value`: Value to write into the attention mask for padding tokens. Stable Diffusion needs 1.
         `downweight_mode`: Specifies whether downweighting should be applied by MASKing out the downweighted tokens
             (default) or REMOVEing them (legacy behaviour; messes up position embeddings of tokens following).
+        `use_penultimate_clip_layer`: If True, use the penultimate hidden layer output of the CLIP text encoder's output,
+            rather than the final hidden layer output. For SD2.0/2.1 you should probably pass `True` here because SD2
+            is "conditioned on the penultimate text embeddings of a CLIP ViT-H/14 text encoder".
         """
         self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
                                                         text_encoder=text_encoder,
@@ -49,7 +54,8 @@ class Compel:
                                                         dtype_for_device_getter=dtype_for_device_getter,
                                                         truncate=truncate_long_prompts,
                                                         padding_attention_mask_value = padding_attention_mask_value,
-                                                        downweight_mode = downweight_mode
+                                                        downweight_mode=downweight_mode,
+                                                        use_penultimate_clip_layer=use_penultimate_clip_layer
                                                         )
 
     @property
@@ -151,14 +157,17 @@ class Compel:
         return conditionings
 
 
-    def _get_conditioning_for_flattened_prompt(self, prompt: FlattenedPrompt, should_return_tokens: bool=False
+    def _get_conditioning_for_flattened_prompt(self,
+                                               prompt: FlattenedPrompt,
+                                               should_return_tokens: bool=False
                                                ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         if type(prompt) is not FlattenedPrompt:
             raise ValueError(f"embeddings can only be made from FlattenedPrompts, got {type(prompt).__name__} instead")
         fragments = [x.text for x in prompt.children]
         weights = [x.weight for x in prompt.children]
         conditioning, tokens = self.conditioning_provider.get_embeddings_for_weighted_prompt_fragments(
-            text_batch=[fragments], fragment_weights_batch=[weights], should_return_tokens=True, device=self.device)
+            text_batch=[fragments], fragment_weights_batch=[weights],
+            should_return_tokens=True, device=self.device)
         if should_return_tokens:
             return conditioning, tokens
         else:

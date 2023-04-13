@@ -4,7 +4,8 @@ import unittest
 import torch
 
 from src.compel.embeddings_provider import EmbeddingsProvider, DownweightMode
-from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
+from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS, NullTransformer
+
 
 def make_dummy_embeddings_provider(max_length=10, embedding_length=768, **kwargs) -> EmbeddingsProvider:
     tokenizer = DummyTokenizer(max_length)
@@ -13,6 +14,110 @@ def make_dummy_embeddings_provider(max_length=10, embedding_length=768, **kwargs
 
 
 class EmbeddingsProviderTestCase(unittest.TestCase):
+
+    def test_tokenizing(self):
+        tokenizer = DummyTokenizer(model_max_length=5)
+        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer(),
+                                                 padding_attention_mask_value=0)
+
+        prompts = ['a b']
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts,
+                                                                                                      weights=[0.8],
+                                                                                                      device='cpu')
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 5, 4], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor([1.0] + [0.8] * 2 + [1.0] * 2)))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 0])))
+
+        prompts = ['a b c']
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts,
+                                                                                                      weights=[0.8],
+                                                                                                      device='cpu')
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]))))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1])))
+
+        prompts = ['']
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts,
+                                                                                                      weights=[0.8],
+                                                                                                      device='cpu')
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 5, 4, 4, 4], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] * 5))))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 0, 0, 0])))
+
+        prompts = []
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts,
+                                                                                                      weights=[],
+                                                                                                      device='cpu')
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 5, 4, 4, 4], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] * 5))))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 0, 0, 0])))
+
+        # truncation
+        prompts = ['a b c a b c a b c']
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts,
+                                                                                                      weights=[0.8],
+                                                                                                      device='cpu')
+        self.assertTrue(torch.equal(token_ids_tensor, torch.tensor([3, 0, 1, 2, 5], dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]))))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1])))
+
+    def test_long_tokenizing(self):
+        tokenizer = DummyTokenizer(model_max_length=5)
+        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer(),
+                                                 truncate=False, padding_attention_mask_value=0)
+
+        prompts = ['a b c c b a a c b']
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts,
+                                                                                                      weights=[0.8],
+                                                                                                      device='cpu')
+        self.assertTrue(torch.equal(token_ids_tensor,
+                                    torch.tensor([3, 0, 1, 2, 5] + [3, 2, 1, 0, 5] + [3, 0, 2, 1, 5],
+                                                 dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(([1.0] + [0.8] * 3 + [1.0]) * 3)))
+        self.assertTrue(torch.equal(mask, torch.tensor(([1, 1, 1, 1, 1] * 3))))
+
+        prompts = ['a b c c b a a c b a']
+        token_ids_tensor, weights_tensor, mask = embeddings_provider.get_token_ids_and_expand_weights(prompts,
+                                                                                                      weights=[0.8],
+                                                                                                      device='cpu')
+        self.assertTrue(torch.equal(token_ids_tensor,
+                                    torch.tensor([3, 0, 1, 2, 5, 3, 2, 1, 0, 5, 3, 0, 2, 1, 5, 3, 0, 5, 4, 4],
+                                                 dtype=torch.int64)))
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor(
+            ([1.0] + [0.8] * 3 + [1.0]) * 3 + ([1.0] + [0.8] + [1.0]) + ([1.0] * 2))))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1] * 3 + [1, 1, 1] + [0, 0])))
+
+    def test_tokenize_to_mask(self):
+        tokenizer = DummyTokenizer(model_max_length=7)
+        text_encoder = DummyTransformer()
+        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder,
+                                                 padding_attention_mask_value=0)
+
+        fragments = ['a b']
+        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1] * len(fragments),
+                                                                          device='cpu')
+        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 0, 0, 0])
+
+        fragments = ['a b c a b c a']
+        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1] * len(fragments),
+                                                                          device='cpu')
+        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 1, 1, 1])
+
+        fragments = ['a', 'b c']
+        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1, 2], device='cpu')
+        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 1, 0, 0])
+
+        # eos/bos only
+        fragments = []
+        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1] * len(fragments),
+                                                                          device='cpu')
+        self.assertSequenceEqual(mask.tolist(), [1, 1, 0, 0, 0, 0, 0])
+
+        # too long
+        fragments = ['a b c a b c a b c a b c']
+        _, _, mask = embeddings_provider.get_token_ids_and_expand_weights(fragments, weights=[1] * len(fragments),
+                                                                          device='cpu')
+        self.assertSequenceEqual(mask.tolist(), [1, 1, 1, 1, 1, 1, 1])
 
     def test_get_token_ids(self):
         ep = make_dummy_embeddings_provider()
@@ -213,6 +318,8 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         expected_mask = torch.Tensor([1] * 16 + [0] * 4)
         expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor(expected_weights), attention_mask=expected_mask)
         self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
+
+
 
 
 
