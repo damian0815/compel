@@ -63,6 +63,8 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
+#### 1.1.2 - fix for #21 (crash when parsing long prompts with truncation enabled if there is weighted fragments beyond the truncation boundary)
+
 #### 1.1.1 - fix for #22 (issues parsing `.` characters inside parentheses)
 
 #### 1.1.0 - support for parsing `withLora`/`useLora` on `parse_prompt_string()`.
