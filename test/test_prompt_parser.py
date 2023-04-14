@@ -63,6 +63,17 @@ class PromptParserTestCase(unittest.TestCase):
         self.assertEqual(make_weighted_conjunction([('pretty flowers', 1.1), (', the flames are too hot', 1)]),
                          parse_prompt("(pretty flowers)+, the flames are too hot"))
 
+
+    def test_wayward_periods(self):
+        self.assertEqual(
+            make_weighted_conjunction([('a text .', 0.7), ('.', 1.0), ('a second text .', 0.8)]),
+            parse_prompt("(a text.)0.7. (a second text.)0.8"))
+
+        self.assertEqual(
+            make_weighted_conjunction([('a text .', 0.7), ('.', 1.0), ('a second text .', 0.8)]),
+            parse_prompt("\"a text.\"0.7. \"a second text.\"0.8"))
+
+
     def test_no_parens_attention_runon(self):
         self.assertEqual(make_weighted_conjunction([('fire', 1.0), ('flames', pow(1.1, 2))]), parse_prompt("fire flames++"))
         self.assertEqual(make_weighted_conjunction([('fire', 1.0), ('flames', pow(0.9, 2))]), parse_prompt("fire flames--"))

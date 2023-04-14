@@ -124,7 +124,8 @@ class EmbeddingsProvider:
             # such that the resulting lerped embedding is exactly half-way between "mountain man" and "mountain".
             fragment_token_index_ranges = self._get_token_ranges_for_fragments(tokens.tolist(), fragments)
 
-            for index, fragment_weight in enumerate(weights):
+            for index in range(len(fragment_token_index_ranges)):
+                fragment_weight = weights[index]
                 if fragment_weight < 1:
                     if self.downweight_mode == DownweightMode.MASK:
                         fragment_start_token_id, fragment_end_token_id = fragment_token_index_ranges[index]
@@ -161,7 +162,6 @@ class EmbeddingsProvider:
                     epsilon = 1e-5
                     fragment_weight = max(epsilon, fragment_weight) # inf is bad
                     embedding_lerp_weight = math.tan((1.0 - fragment_weight) * math.pi / 2)
-                    # todo handle negative weight?
 
                     per_embedding_weights.append(embedding_lerp_weight)
 
@@ -197,7 +197,7 @@ class EmbeddingsProvider:
         # (part of `transformers` lib)
         token_ids_list = self.tokenizer(
             texts,
-            truncation=False,
+            truncation=self.truncate_to_model_max_length,
             padding='do_not_pad',
             return_tensors=None,  # just give me lists of ints
         )['input_ids']
