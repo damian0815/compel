@@ -63,9 +63,9 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
-#### 1.1.3 - enable fetching the penultimate CLIP hidden layers (improves generation quality on SD2.1) (aka "clip skip")
+#### 1.1.3 - enable fetching the penultimate CLIP hidden layer (aka "clip skip")
 
-To use, pass `use_penultimate_clip_layer=True` when initializing your `Compel` instance.
+To use, pass `use_penultimate_clip_layer=True` when initializing your `Compel` instance. Note that there's no need to pass this flag for SD2.0/SD2.1 because diffusers already throws away the last hidden layer when loading the SD2.0+ text encoder.
 
 #### 1.1.2 - fix for #21 (crash when parsing long prompts with truncation enabled if there is weighted fragments beyond the truncation boundary)
 

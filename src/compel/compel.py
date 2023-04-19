@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Union, Optional, Callable, List, Tuple
 
 import torch
+from torch import Tensor
 from transformers import CLIPTokenizer, CLIPTextModel
 
 from . import cross_attention_control
@@ -45,8 +46,7 @@ class Compel:
         `downweight_mode`: Specifies whether downweighting should be applied by MASKing out the downweighted tokens
             (default) or REMOVEing them (legacy behaviour; messes up position embeddings of tokens following).
         `use_penultimate_clip_layer`: If True, use the penultimate hidden layer output of the CLIP text encoder's output,
-            rather than the final hidden layer output. For SD2.0/2.1 you should probably pass `True` here because SD2
-            is "conditioned on the penultimate text embeddings of a CLIP ViT-H/14 text encoder".
+            rather than the final hidden layer output.
         """
         self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
                                                         text_encoder=text_encoder,
@@ -80,7 +80,7 @@ class Compel:
         return conditioning
 
     @torch.no_grad()
-    def __call__(self, text: Union[str, List[str]]) -> torch.Tensor:
+    def __call__(self, text: Union[str, List[str]]) -> torch.FloatTensor:
         if not isinstance(text, list):
             text = [text]
 
