@@ -28,8 +28,8 @@ class Compel:
                  truncate_long_prompts: bool = True,
                  padding_attention_mask_value: int = 1,
                  downweight_mode: DownweightMode = DownweightMode.MASK,
-                 use_penultimate_clip_layer: bool=False
-                 ):
+                 use_penultimate_clip_layer: bool=False,
+                 device: Optional[str] = None):
         """
         Initialize Compel. The tokenizer and text_encoder can be lifted directly from any DiffusionPipeline.
 
@@ -47,6 +47,8 @@ class Compel:
             (default) or REMOVEing them (legacy behaviour; messes up position embeddings of tokens following).
         `use_penultimate_clip_layer`: If True, use the penultimate hidden layer output of the CLIP text encoder's output,
             rather than the final hidden layer output.
+        `device`: The torch device on which the tensors should be created. If a device is not specified, it'll use the
+            device the `text_encoder` is on (at the moment of calling `build_conditioning_tensor()`).
         """
         self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
                                                         text_encoder=text_encoder,
@@ -57,10 +59,11 @@ class Compel:
                                                         downweight_mode=downweight_mode,
                                                         use_penultimate_clip_layer=use_penultimate_clip_layer
                                                         )
+        self._device = device
 
     @property
     def device(self):
-        return self.conditioning_provider.text_encoder.device
+        return self._device if self._device else self.conditioning_provider.text_encoder.device
 
     def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str='') -> ConditioningScheduler:
         positive_conditioning = self.build_conditioning_tensor(positive_prompt)
