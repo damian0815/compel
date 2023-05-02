@@ -108,7 +108,7 @@ class EmbeddingsProvider:
 
             # handle weights >=1
             tokens, per_token_weights, mask = self.get_token_ids_and_expand_weights(fragments, weights, device=device)
-            base_embedding = self.build_weighted_embedding_tensor(tokens, per_token_weights, mask)
+            base_embedding = self.build_weighted_embedding_tensor(tokens, per_token_weights, mask, device=device)
 
             # this is our starting point
             embeddings = base_embedding.unsqueeze(0)
@@ -138,14 +138,16 @@ class EmbeddingsProvider:
                             mask_without_fragment[self.tokenizer.model_max_length-1::self.tokenizer.model_max_length] = 1
                         embedding_without_this = self.build_weighted_embedding_tensor(tokens,
                                                                                       per_token_weights,
-                                                                                      mask_without_fragment)
+                                                                                      mask_without_fragment,
+                                                                                      device=device)
                     else:
                         fragments_without_this = fragments[0:index] + fragments[index+1:]
                         weights_without_this = weights[0:index] + weights[index+1:]
                         tokens_without_fragment, per_token_weights_without_fragment, mask_without_fragment = \
                             self.get_token_ids_and_expand_weights(fragments_without_this, weights_without_this, device=device)
                         embedding_without_this = self.build_weighted_embedding_tensor(tokens_without_fragment,
-                                                                                      per_token_weights_without_fragment)
+                                                                                      per_token_weights_without_fragment,
+                                                                                      device=device)
 
                     embeddings = torch.cat((embeddings, embedding_without_this.unsqueeze(0)), dim=1)
                     # weight of the embedding *without* this fragment gets *stronger* as its weight approaches 0
@@ -289,7 +291,7 @@ class EmbeddingsProvider:
 
         all_token_ids_tensor = torch.tensor(all_token_ids, dtype=torch.long, device=device)
         all_per_token_weights_tensor = torch.tensor(all_token_weights,
-                                                    dtype=self.get_dtype_for_device(self.text_encoder.device),
+                                                    dtype=self.get_dtype_for_device(device),
                                                     device=device)
         all_masks = torch.tensor(all_masks, dtype=torch.long, device=device)
         # print(f"assembled all_token_ids_tensor with shape {all_token_ids_tensor.shape}")
@@ -299,7 +301,8 @@ class EmbeddingsProvider:
     def build_weighted_embedding_tensor(self,
                                         token_ids: torch.Tensor,
                                         per_token_weights: torch.Tensor,
-                                        attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+                                        attention_mask: Optional[torch.Tensor] = None,
+                                        device: Optional[str] = None) -> torch.Tensor:
         """
         Build a tensor that embeds the passed-in token IDs and applies the given per_token weights
 
@@ -317,11 +320,14 @@ class EmbeddingsProvider:
         if token_ids.shape[0] % self.max_token_count != 0:
             raise ValueError(f"token_ids has shape {token_ids.shape} - expected a multiple of {self.max_token_count}")
 
+        if device is None:
+            device = self.text_encoder.device
+
         chunk_start_index = 0
         empty_token_ids = torch.tensor([self.tokenizer.bos_token_id] +
                                        [self.tokenizer.eos_token_id] +
                                        [self.tokenizer.pad_token_id] * (self.max_token_count - 2),
-                                       dtype=torch.int, device=self.text_encoder.device).unsqueeze(0)
+                                       dtype=torch.int, device=device).unsqueeze(0)
         empty_z = self._encode_token_ids_to_embeddings(empty_token_ids)
         weighted_z = None
 
