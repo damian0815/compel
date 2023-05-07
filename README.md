@@ -63,6 +63,8 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
+#### 1.1.5 - fix for compel turning numbers into floats for text inside parentheses
+
 #### 1.1.4 - fixes for #23 (sequential offload) and InvokeAI issue #3442 (allow hyphens in LoRA names) 
 
 #### 1.1.3 - enable fetching the penultimate CLIP hidden layer (aka "clip skip")

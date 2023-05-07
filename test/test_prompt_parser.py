@@ -611,8 +611,12 @@ class PromptParserTestCase(unittest.TestCase):
 
 
     def test_bad_auto1111_syntax(self):
-        self.assertEqual(Conjunction([FlattenedPrompt([("happy camper:0.3", 1.0)])]),
+        self.assertEqual(Conjunction([FlattenedPrompt([("happy camper:0 . 3", 1.0)])]),
                          parse_prompt("(happy camper:0.3)"))
+
+    def test_numbers_to_floats(self):
+        self.assertEqual(Conjunction([FlattenedPrompt([("test1 , 1test , test1test", 1.0)])]),
+                        parse_prompt("(test1, 1test, test1test)"))
 
 
 if __name__ == '__main__':

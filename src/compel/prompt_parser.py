@@ -504,6 +504,7 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
     # accepts int or float notation, always maps to float
     number = pp.pyparsing_common.real | \
              pp.Combine(pp.Optional("-")+pp.Word(pp.nums)).set_parse_action(pp.token_map(float))
+    non_float_number = pp.Combine(pp.Optional("-") + pp.Word(pp.nums))
 
     # for options
     keyword = pp.Word(pp.alphanums + '_' + '-')
@@ -512,10 +513,10 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
     non_syntax_word = pp.Combine(pp.OneOrMore(pp.MatchFirst([
             pp.Or(syntactic_symbols.values()), # escaped syntactic symbols
             pp.one_of(['-', '+']) + pp.NotAny(pp.White() | pp.Char(syntactic_chars) | pp.StringEnd()),
-            number,
             # build character-by-character
-            pp.CharsNotIn(string.whitespace + syntactic_chars, exact=1)
-        ])))
+            non_float_number,
+            pp.CharsNotIn(string.whitespace + syntactic_chars, exact=1),
+    ])))
     non_syntax_word.set_parse_action(lambda x: [Fragment(t) for t in x])
     non_syntax_word.set_name('non_syntax_word')
     non_syntax_word.set_debug(False)
@@ -587,9 +588,13 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
     )
     attention_explicit.set_parse_action(make_operator_object)
     attention_implicit = (
-        pp.Group(potential_operator_target)
+         pp.Group(quoted_fragment | parenthesized_fragment)
+         + pp.NotAny(pp.White())  # do not permit whitespace between term and operator
+         + pp.Group(attention_weight_operator)
+    ) | (
+        pp.Group(non_syntax_word)
         + pp.NotAny(pp.White()) # do not permit whitespace between term and operator
-        + pp.Group(attention_weight_operator)
+        + pp.Group(pp.Word('+') | pp.Word('-'))
     )
     attention_implicit.set_parse_action(lambda x: make_operator_object([x[0], '.attend', x[1]]))
     attention << (attention_explicit | attention_implicit)
