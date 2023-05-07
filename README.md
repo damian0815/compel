@@ -63,6 +63,8 @@ images[1].save("image1.jpg")
 
 ## Changelog
 
+#### 1.1.4 - fixes for #23 (sequential offload) and InvokeAI issue #3442 (allow hyphens in LoRA names) 
+
 #### 1.1.3 - enable fetching the penultimate CLIP hidden layer (aka "clip skip")
 
 To use, pass `use_penultimate_clip_layer=True` when initializing your `Compel` instance. Note that there's no need to pass this flag for SD2.0/SD2.1 because diffusers already throws away the last hidden layer when loading the SD2.0+ text encoder.
