@@ -506,7 +506,7 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
              pp.Combine(pp.Optional("-")+pp.Word(pp.nums)).set_parse_action(pp.token_map(float))
 
     # for options
-    keyword = pp.Word(pp.alphanums + '_')
+    keyword = pp.Word(pp.alphanums + '_' + '-')
 
     # a word that absolutely does not contain any meaningful syntax
     non_syntax_word = pp.Combine(pp.OneOrMore(pp.MatchFirst([
