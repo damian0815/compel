@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import Enum
 from typing import Union, Optional, Callable, List, Tuple
 
 import torch
@@ -16,6 +17,10 @@ __all__ = ["Compel", "DownweightMode"]
 class ExtraConditioningInfo:
     pass
 
+class BlendMode(Enum):
+    LERP = 0,   # Apply blend by lerping embeddings
+    CONCAT = 1  # Apply blend by concatenating embeddings
+
 
 class Compel:
 
@@ -28,6 +33,7 @@ class Compel:
                  truncate_long_prompts: bool = True,
                  padding_attention_mask_value: int = 1,
                  downweight_mode: DownweightMode = DownweightMode.MASK,
+                 blend_mode: BlendMode = BlendMode.LERP,
                  use_penultimate_clip_layer: bool=False,
                  device: Optional[str] = None):
         """
@@ -60,6 +66,7 @@ class Compel:
                                                         use_penultimate_clip_layer=use_penultimate_clip_layer
                                                         )
         self._device = device
+        self.blend_mode = blend_mode
 
     @property
     def device(self):
@@ -183,10 +190,14 @@ class Compel:
             conditionings_to_blend.append(this_conditioning)
         conditionings_to_blend = self.pad_conditioning_tensors_to_same_length(conditionings_to_blend)
         conditionings_to_blend_tensor = torch.cat(conditionings_to_blend).unsqueeze(0)
-        conditioning = EmbeddingsProvider.apply_embedding_weights(conditionings_to_blend_tensor,
-                                                                  blend.weights,
-                                                                  normalize=blend.normalize_weights)
-        return conditioning
+        if self.blend_mode == BlendMode.LERP:
+            conditioning = EmbeddingsProvider.lerp_embeddings(conditionings_to_blend_tensor,
+                                                              blend.weights,
+                                                              normalize=blend.normalize_weights)
+        else:
+            conditioning = EmbeddingsProvider.concat_embeddings(conditionings_to_blend_tensor,
+                                                                blend.weights)
+        return conditioning.unsqueeze(0)
 
 
 

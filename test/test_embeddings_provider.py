@@ -238,10 +238,10 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         downweighted_lerp_weight = math.tan((1.0 - downweighted_fragment_weight) * math.pi / 2)
         blend_weights = [1.0, downweighted_lerp_weight]
 
-        expected_embeddings = EmbeddingsProvider.apply_embedding_weights(torch.cat([expected_embeddings_main_part,
-                                                                                    expected_embeddings_downweighted_dropped]).unsqueeze(0),
-                                                                         per_embedding_weights=blend_weights,
-                                                                         normalize=True)
+        expected_embeddings = EmbeddingsProvider.lerp_embeddings(torch.cat([expected_embeddings_main_part,
+                                                                            expected_embeddings_downweighted_dropped]).unsqueeze(0),
+                                                                 per_embedding_weights=blend_weights,
+                                                                 normalize=True)
         self.assertTrue(torch.allclose(embeddings, expected_embeddings, atol=1e-8))
 
     def test_downweighting_prompt_fragments_remove(self):
@@ -267,10 +267,10 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         downweighted_lerp_weight = math.tan((1.0 - downweighted_fragment_weight) * math.pi / 2)
         blend_weights = [1.0, downweighted_lerp_weight]
 
-        expected_embeddings = EmbeddingsProvider.apply_embedding_weights(torch.cat([expected_embeddings_main_part,
-                                                                                    expected_embeddings_cut]).unsqueeze(0),
-                                                                         per_embedding_weights=blend_weights,
-                                                                         normalize=True)
+        expected_embeddings = EmbeddingsProvider.lerp_embeddings(torch.cat([expected_embeddings_main_part,
+                                                                            expected_embeddings_cut]).unsqueeze(0),
+                                                                 per_embedding_weights=blend_weights,
+                                                                 normalize=True)
         self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
 
 

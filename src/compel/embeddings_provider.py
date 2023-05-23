@@ -61,16 +61,25 @@ class EmbeddingsProvider:
 
 
     @classmethod
-    def apply_embedding_weights(cls, embeddings: torch.Tensor, per_embedding_weights: List[float],
-                                normalize: bool) -> torch.Tensor:
+    def lerp_embeddings(cls, embeddings: torch.Tensor, per_embedding_weights: List[float],
+                        normalize: bool) -> torch.Tensor:
         per_embedding_weights = torch.tensor(per_embedding_weights, dtype=embeddings.dtype, device=embeddings.device)
         if normalize:
             per_embedding_weights = per_embedding_weights / torch.sum(per_embedding_weights)
 
         reshaped_weights = per_embedding_weights.reshape(per_embedding_weights.shape + (1, 1,))
         blended_embeddings = torch.sum(embeddings * reshaped_weights, dim=1)
-        # blended_embeddings now has shape (77, 768)
         return blended_embeddings
+
+    @classmethod
+    def concat_embeddings(cls, embeddings: torch.Tensor, per_embedding_weights: List[float]):
+        # embeddings has shape [1, N, 77(/154/..), 768]
+        if embeddings.shape[1] != len(per_embedding_weights):
+            raise ValueError("There must be 1 weight for every embedding")
+        weighted_embeddings = []
+        for i, weight in enumerate(per_embedding_weights):
+            weighted_embeddings.append((embeddings[0, i] * weight))
+        return torch.cat(weighted_embeddings, dim=0)
 
     def get_embeddings_for_weighted_prompt_fragments(self,
                                                      text_batch: List[List[str]],
@@ -167,7 +176,7 @@ class EmbeddingsProvider:
 
                     per_embedding_weights.append(embedding_lerp_weight)
 
-            lerped_embeddings = self.apply_embedding_weights(embeddings, per_embedding_weights, normalize=True).squeeze(0)
+            lerped_embeddings = self.lerp_embeddings(embeddings, per_embedding_weights, normalize=True).squeeze(0)
 
             #print(f"assembled tokens for '{fragments}' into tensor of shape {lerped_embeddings.shape}")
 
