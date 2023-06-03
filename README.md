@@ -1,7 +1,7 @@
 # Compel
 A text prompt weighting and blending library for transformers-type text embedding systems, by [@damian0815](https://github.com/damian0815).
 
-With a flexible and intuitive syntax, you can re-weight different parts of a prompt string and thus re-weight the different parts of the embeddning tensor produced from the string.
+With a flexible and intuitive syntax, you can re-weight different parts of a prompt string and thus re-weight the different parts of the embedding tensor produced from the string.
 
 Tested and developed against Hugging Face's `StableDiffusionPipeline` but it should work with any diffusers-based system that uses an `Tokenizer` and a `Text Encoder` of some kind.  
 
@@ -27,7 +27,7 @@ with Hugging Face diffusers >=0.12:
 
 ```python
 from diffusers import StableDiffusionPipeline
-from compel import Compel, DiffusersTextualInversionManager
+from compel import Compel
 
 pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
 compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
@@ -45,10 +45,8 @@ images[0].save("image.jpg")
 For batched input, use the __call__ interface to compel:
 
 ```python
-import torch
-
 from diffusers import StableDiffusionPipeline
-from compel import Compel, DiffusersTextualInversionManager
+from compel import Compel
 
 pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
 compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
@@ -66,8 +64,8 @@ images[1].save("image1.jpg")
 If you want to have access to 🤗diffusers textual inversions, instantiate a `DiffusersTextualInversionManager` and pass it on Compel init:
 
 ```
-textual_inversion_manager = DiffusersTextualInversionManager(pipeline)
 pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
+textual_inversion_manager = DiffusersTextualInversionManager(pipeline)
 compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder, 
     textual_inversion_manager=textual_inversion_manager)
 ```
@@ -80,6 +78,67 @@ If you are using Compel heavily and repeatedly, you may run into PyTorch memory 
 See https://github.com/damian0815/compel/issues/24 for more details. Thanks @kshieh1 !
 
 ## Changelog
+
+### 1.2.0 - Concatenate embeddings using `.and()`
+
+For Stable Diffusion 2.1 I've been experimenting with a new feature: concatenated embeddings. What I noticed, for example, is that for more complex prompts image generation quality becomes wildly better when the prompt is broken into multiple parts and fed to OpenCLIP separately.
+
+TL;DR: you can now experiment with breaking up your prompts into segments, which for SD2.1 appears to improve the generated image. The syntax is `("prompt part 1", "prompt part 2").and()`. You can have more than one part, and you can also weight them, eg `("a man eating an apple", "sitting on the roof of a car", "high quality, trending on artstation, 8K UHD").and(1, 0.5, 0.5)` which will assign weight `1` to `man eating an apple` and `0.5` to `sitting on the roof of a car` and `high quality, trending on artstation, 8K UHD`. 
+
+Here's a nonsense example from the InvokeAI discord #garbage-bin channel, created by gogurt enjoyer's incredible [nightmare prompt generator](https://huggingface.co/cactusfriend/nightmare-invokeai-prompts):
+
+```
+a moist sloppy pindlesackboy sloppy hamblin' bogomadong, Clem Fandango is pissed-off, Wario's Woods in background, making a noise like ga-woink-a
+```
+
+Plugging this straight into SD2.1 we get this:
+![](images/000075.6dfd7adf.466129594.png)
+
+However if the prompt is broken up into chunks and fed into OpenCLIP separately as four separate prompts, and then concatenated:
+
+```
+a moist sloppy pindlesackboy sloppy hamblin' bogomadong
+```
+```
+Clem Fandango is pissed-off
+```
+```
+Wario's Woods in background
+```
+```
+making a noise like ga-woink-a
+```
+
+then output image with the same seed is *so much* better:
+![](images/000076.68b1c320.466129594.png)
+
+In the new `.and()` syntax you would prompt this as follows:
+```
+("a moist sloppy pindlesackboy sloppy hamblin' bogomadong", "Clem Fandango is pissed-off", "Wario's Woods in background", "making a noise like ga-woink-a").and()
+```
+
+The effect can be more or less subtle. Here for example is 
+```
+A dream of a distant galaxy, by Caspar David Friedrich, matte painting, trending on artstation, HQ
+```
+![](../../../Downloads/000129.1b33b559.2793529321.png)
+
+And the same split into two prompts
+
+```
+A dream of a distant galaxy, by Caspar David Friedrich, matte painting
+```
+```
+trending on artstation, HQ
+```
+![](images/000128.b5d5cd62.2793529321.png)
+
+The Compel prompt for this is: 
+```
+("A dream of a distant galaxy, by Caspar David Friedrich, matte painting", "trending on artstation, HQ").and()
+```
+
+
 
 #### 1.1.6 - misc small fixes
 - add `DiffusersTextualInversionManager` (thanks @pdoane)

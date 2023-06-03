@@ -76,11 +76,15 @@ class Compel:
 
     def build_conditioning_tensor(self, text: str) -> torch.Tensor:
         conjunction = self.parse_prompt_string(text)
-        if len(conjunction.prompts)>1:
-            raise ValueError("Conjunctions of >1 prompt are currently not supported by build_conditioning_tensor()")
-        prompt_object = conjunction.prompts[0]
-        conditioning, _ = self.build_conditioning_tensor_for_prompt_object(prompt_object)
-        return conditioning
+        if len(conjunction.prompts) > 1 and conjunction.type != 'AND':
+            raise ValueError("Only AND conjunctions are supported by build_conditioning_tensor()")
+        # concatenate each prompt in the conjunction (typically there will only be 1)
+        to_concat = []
+        for p in conjunction.prompts:
+            conditioning, _ = self.build_conditioning_tensor_for_prompt_object(p)
+            to_concat.append(conditioning)
+        return torch.concat(to_concat, dim=1)
+
 
     @torch.no_grad()
     def __call__(self, text: Union[str, List[str]]) -> torch.FloatTensor:

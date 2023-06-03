@@ -255,6 +255,32 @@ class CompelTestCase(unittest.TestCase):
         # 3*max_length is caused by the need to have eos/bos markers at start and end of each encoded part
         self.assertTrue(embeds.shape == (2, 3*max_length, 768))
 
+    def test_concat_for_and(self):
+        max_length = 5
+        tokenizer = DummyTokenizer(model_max_length=max_length)
+        text_encoder = DummyTransformer()
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
+
+        embeds_separate = compel(['a b c', 'b a'])
+        embeds_concat = compel('("a b c", "b a").and()')
+        self.assertTrue(torch.allclose(embeds_concat, torch.reshape(embeds_separate, [1, 10, 768])))
+
+        embeds_separate = torch.concat([compel('a b c a b c a b c'), compel('b a')], dim=1)
+        embeds_concat = compel('("a b c a b c a b c", "b a").and()')
+        self.assertTrue(torch.allclose(embeds_concat, embeds_separate))
+
+
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=True)
+
+        embeds_separate = compel(['a b c', 'b a'])
+        embeds_concat = compel('("a b c", "b a").and()')
+        self.assertTrue(torch.allclose(embeds_concat, torch.reshape(embeds_separate, [1, 10, 768])))
+
+        embeds_separate = torch.concat([compel('a b c a b c a b c'), compel('b a')], dim=1)
+        embeds_concat = compel('("a b c a b c a b c", "b a").and()')
+        self.assertTrue(torch.allclose(embeds_concat, embeds_separate))
+
+
 
 if __name__ == '__main__':
     unittest.main()
