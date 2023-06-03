@@ -72,10 +72,20 @@ compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder
     textual_inversion_manager=textual_inversion_manager)
 ```
 
+## Memory usage/VRAM leaks
+
+If you are using Compel heavily and repeatedly, you may run into PyTorch memory issues. To alleviate this, according to @kshieh1: 
+> After image generation, you should explictly de-reference the tensor object (i.e., prompt_embeds = None) and call gc.collect()
+
+See https://github.com/damian0815/compel/issues/24 for more details. Thanks @kshieh1 !
 
 ## Changelog
 
-#### 1.1.6 - add `DiffusersTextualInversionManager` (thanks @pdoane!)
+#### 1.1.6 - misc small fixes
+- add `DiffusersTextualInversionManager` (thanks @pdoane)
+- fix #18 (batch embedding generation with truncated/non-truncated prompt lengths)
+- add note about memory leakage (ref #24, thanks @kshieh1) 
+- 
 
 #### 1.1.5 - fix for compel turning numbers into floats for text inside parentheses
 
