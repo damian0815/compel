@@ -619,5 +619,9 @@ class PromptParserTestCase(unittest.TestCase):
                         parse_prompt("(test1, 1test, test1test)"))
 
 
+    def test_commas_and_whitespace(self):
+        self.assertEqual(Conjunction([FlattenedPrompt([("middle age,", 1.0), ("fantasy", pow(1.1, 2)), ("style", 1)])]),
+                         parse_prompt("middle age,fantasy++ style"))
+
 if __name__ == '__main__':
     unittest.main()

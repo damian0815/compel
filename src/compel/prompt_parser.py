@@ -2,6 +2,7 @@ import string
 from dataclasses import dataclass
 from typing import Union, Optional, List, Tuple
 import pyparsing as pp
+import re
 
 __all__ = ["PromptParser"]
 
@@ -306,6 +307,9 @@ class PromptParser():
         :return: a Conjunction representing the parsed results.
         '''
         verbose and print(f"parsing '{prompt}'")
+
+        # enforce whitespace after ,
+        prompt = re.sub(r',(\S)', r', \1', prompt)
 
         if len(prompt.strip()) == 0:
             return Conjunction(prompts=[FlattenedPrompt([('', 1.0)])], weights=[1.0])
