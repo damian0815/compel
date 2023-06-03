@@ -91,21 +91,18 @@ Here's a nonsense example from the InvokeAI discord #garbage-bin channel, create
 a moist sloppy pindlesackboy sloppy hamblin' bogomadong, Clem Fandango is pissed-off, Wario's Woods in background, making a noise like ga-woink-a
 ```
 
-Plugging this straight into SD2.1 we get this:
+Plugging this straight into SD2.1 we get this, which is really not a good image:
 ![](images/000075.6dfd7adf.466129594.png)
 
-However if the prompt is broken up into chunks and fed into OpenCLIP separately as four separate prompts, and then concatenated:
+However, if the prompt is broken up into chunks and fed into OpenCLIP separately as four separate prompts, and then concatenated:
 
 ```
 a moist sloppy pindlesackboy sloppy hamblin' bogomadong
-```
-```
+
 Clem Fandango is pissed-off
-```
-```
+
 Wario's Woods in background
-```
-```
+
 making a noise like ga-woink-a
 ```
 
@@ -121,14 +118,12 @@ The effect can be more or less subtle. Here for example is
 ```
 A dream of a distant galaxy, by Caspar David Friedrich, matte painting, trending on artstation, HQ
 ```
-![](../../../Downloads/000129.1b33b559.2793529321.png)
+![](images/000129.1b33b559.2793529321.png)
 
-And the same split into two prompts
-
+And the same split into two parts:
 ```
 A dream of a distant galaxy, by Caspar David Friedrich, matte painting
-```
-```
+
 trending on artstation, HQ
 ```
 ![](images/000128.b5d5cd62.2793529321.png)
@@ -137,6 +132,7 @@ The Compel prompt for this is:
 ```
 ("A dream of a distant galaxy, by Caspar David Friedrich, matte painting", "trending on artstation, HQ").and()
 ```
+
 
 
 
