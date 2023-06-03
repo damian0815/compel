@@ -244,21 +244,16 @@ class CompelTestCase(unittest.TestCase):
                                        conditioning_at_end.negative_conditioning,
                                        atol=1e-6))
 
-
-
-    def test_long_bad_prompt(self):
+    def test_long_and_short_call(self):
         max_length = 5
         tokenizer = DummyTokenizer(model_max_length=max_length)
         text_encoder = DummyTransformer()
         compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
 
-        positive_prompt = "a b c withLora(something)"
-        negative_prompt = '("a b c a b c a b", "c").blend()'
-        positive_conditioning = compel.build_conditioning_tensor(positive_prompt)
-        negative_conditioning = compel.build_conditioning_tensor(negative_prompt)
-
-
-
+        prompts = ["a b c", "a b c a b c a b"]
+        embeds = compel(prompts)
+        # 3*max_length is caused by the need to have eos/bos markers at start and end of each encoded part
+        self.assertTrue(embeds.shape == (2, 3*max_length, 768))
 
 
 if __name__ == '__main__':
