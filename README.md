@@ -30,8 +30,7 @@ from diffusers import StableDiffusionPipeline
 from compel import Compel, DiffusersTextualInversionManager
 
 pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
-textual_inversion_manager = DiffusersTextualInversionManager(pipeline)
-compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder, textual_inversion_manager=textual_inversion_manager)
+compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
 
 # upweight "ball"
 prompt = "a cat playing with a ball++ in the forest"
@@ -52,8 +51,7 @@ from diffusers import StableDiffusionPipeline
 from compel import Compel, DiffusersTextualInversionManager
 
 pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
-textual_inversion_manager = DiffusersTextualInversionManager(pipeline)
-compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder, textual_inversion_manager=textual_inversion_manager)
+compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
 
 prompts = ["a cat playing with a ball++ in the forest", "a dog playing with a ball in the forest"]
 prompt_embeds = compel(prompts)
@@ -63,7 +61,21 @@ images[0].save("image0.jpg")
 images[1].save("image1.jpg")
 ```
 
+### Textual Inversion support
+
+If you want to have access to 🤗diffusers textual inversions, instantiate a `DiffusersTextualInversionManager` and pass it on Compel init:
+
+```
+textual_inversion_manager = DiffusersTextualInversionManager(pipeline)
+pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
+compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder, 
+    textual_inversion_manager=textual_inversion_manager)
+```
+
+
 ## Changelog
+
+#### 1.1.6 - add `DiffusersTextualInversionManager` (thanks @pdoane!)
 
 #### 1.1.5 - fix for compel turning numbers into floats for text inside parentheses
 
