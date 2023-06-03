@@ -27,10 +27,11 @@ with Hugging Face diffusers >=0.12:
 
 ```python
 from diffusers import StableDiffusionPipeline
-from compel import Compel
+from compel import Compel, DiffusersTextualInversionManager
 
 pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
-compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
+textual_inversion_manager = DiffusersTextualInversionManager(pipeline)
+compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder, textual_inversion_manager=textual_inversion_manager)
 
 # upweight "ball"
 prompt = "a cat playing with a ball++ in the forest"
@@ -48,10 +49,11 @@ For batched input, use the __call__ interface to compel:
 import torch
 
 from diffusers import StableDiffusionPipeline
-from compel import Compel
+from compel import Compel, DiffusersTextualInversionManager
 
 pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
-compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
+textual_inversion_manager = DiffusersTextualInversionManager(pipeline)
+compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder, textual_inversion_manager=textual_inversion_manager)
 
 prompts = ["a cat playing with a ball++ in the forest", "a dog playing with a ball in the forest"]
 prompt_embeds = compel(prompts)
