@@ -83,9 +83,9 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 #### 1.1.6 - misc small fixes
 - add `DiffusersTextualInversionManager` (thanks @pdoane)
-- fix #18 (batch embedding generation with truncated/non-truncated prompt lengths)
+- fix batch embedding generation with truncated/non-truncated prompt lengths (#18, thanks @abassino)
 - add note about memory leakage (ref #24, thanks @kshieh1) 
-- 
+- fix incorrect parsing when commas are not followed by whitespace (#34, thanks @moono)
 
 #### 1.1.5 - fix for compel turning numbers into floats for text inside parentheses
 
