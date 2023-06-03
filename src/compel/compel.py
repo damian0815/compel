@@ -91,6 +91,7 @@ class Compel:
         for text_input in text:
             cond_tensor.append(self.build_conditioning_tensor(text_input))
 
+        cond_tensor = self.pad_conditioning_tensors_to_same_length(conditionings=cond_tensor)
         cond_tensor = torch.cat(cond_tensor)
 
         return cond_tensor
