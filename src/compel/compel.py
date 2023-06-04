@@ -76,15 +76,8 @@ class Compel:
 
     def build_conditioning_tensor(self, text: str) -> torch.Tensor:
         conjunction = self.parse_prompt_string(text)
-        if len(conjunction.prompts) > 1 and conjunction.type != 'AND':
-            raise ValueError("Only AND conjunctions are supported by build_conditioning_tensor()")
-        # concatenate each prompt in the conjunction (typically there will only be 1)
-        to_concat = []
-        for p in conjunction.prompts:
-            conditioning, _ = self.build_conditioning_tensor_for_prompt_object(p)
-            to_concat.append(conditioning)
-        return torch.concat(to_concat, dim=1)
-
+        conditioning, _ = self.build_conditioning_tensor_for_conjunction(conjunction)
+        return conditioning
 
     @torch.no_grad()
     def __call__(self, text: Union[str, List[str]]) -> torch.FloatTensor:
@@ -132,6 +125,26 @@ class Compel:
                 return self._get_conditioning_for_flattened_prompt(prompt), {}
 
         raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
+
+    def build_conditioning_tensor_for_conjunction(self, conjunction: Conjunction) -> Tuple[torch.Tensor, dict]:
+        if len(conjunction.prompts) > 1 and conjunction.type != 'AND':
+            raise ValueError("Only AND conjunctions are supported by build_conditioning_tensor()")
+        # concatenate each prompt in the conjunction (typically there will only be 1)
+        to_concat = []
+        options = {}
+        empty_conditioning = None
+        for i, p in enumerate(conjunction.prompts):
+            this_conditioning, this_options = self.build_conditioning_tensor_for_prompt_object(p)
+            options.update(this_options)  # this is not a smart way to do this but 🤷‍
+            weight = conjunction.weights[i]
+            if weight != 1:
+                # apply weight if we need to
+                empty_conditioning = self.build_conditioning_tensor('') if empty_conditioning is None else empty_conditioning
+                [padded_empty_conditioning, _] = self.pad_conditioning_tensors_to_same_length([empty_conditioning, this_conditioning])
+                this_conditioning = padded_empty_conditioning + (this_conditioning - padded_empty_conditioning) * weight
+            to_concat.append(this_conditioning)
+        return torch.concat(to_concat, dim=1), options
+
 
     def pad_conditioning_tensors_to_same_length(self, conditionings: List[torch.Tensor],
                                                 ) -> List[torch.Tensor]:

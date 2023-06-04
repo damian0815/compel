@@ -79,6 +79,8 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 ## Changelog
 
+#### 1.2.1 - actually apply `.and()` weights
+
 ### 1.2.0 - Concatenate embeddings using `.and()`
 
 For Stable Diffusion 2.1 I've been experimenting with a new feature: concatenated embeddings. What I noticed, for example, is that for more complex prompts image generation quality becomes wildly better when the prompt is broken into multiple parts and fed to OpenCLIP separately.
