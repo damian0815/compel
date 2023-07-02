@@ -366,10 +366,11 @@ class EmbeddingsProvider:
         if self.use_penultimate_clip_layer:
             # needs normalizing
             penultimate_hidden_state = text_encoder_output.hidden_states[-2]
-            return self.text_encoder.text_model.final_layer_norm(penultimate_hidden_state)
+            return self.text_encoder.text_model.final_layer_norm(penultimate_hidden_state).detach().clone()
         else:
             # already normalized
-            return text_encoder_output.last_hidden_state
+            # detach().clone() necessary to work around a memory leak problem in the clip library
+            return text_encoder_output.last_hidden_state.detach().clone()
 
     def _get_token_ranges_for_fragments(self, chunked_and_padded_token_ids: List[int], fragments: List[str]) -> List[Tuple[int, int]]:
         """
