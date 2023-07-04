@@ -76,7 +76,9 @@ compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder
 
 ## Memory usage/VRAM leaks
 
-If you are using Compel heavily and repeatedly, you may run into PyTorch memory issues. To alleviate this, according to @kshieh1: 
+If you run into memory issues, please make sure you're running compel inside `with torch.no_grad():` blocks. 
+
+If this doesn't help, you could try this advice offered by @kshieh1: 
 > After image generation, you should explictly de-reference the tensor object (i.e., prompt_embeds = None) and call gc.collect()
 
 See https://github.com/damian0815/compel/issues/24 for more details. Thanks @kshieh1 !
