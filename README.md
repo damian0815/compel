@@ -5,7 +5,7 @@ With a flexible and intuitive syntax, you can re-weight different parts of a pro
 
 Tested and developed against Hugging Face's `StableDiffusionPipeline` but it should work with any diffusers-based system that uses an `Tokenizer` and a `Text Encoder` of some kind.  
 
-Adapted from the [InvokeAI](https://github.com/invoke-ai) prompting code (also by [@damian0815](https://github.com/damian0815)). For now, the syntax is fully documented [here](Reference.md).
+Adapted from the [InvokeAI](https://github.com/invoke-ai) prompting code (also by [@damian0815](https://github.com/damian0815)).
 
 Note that cross-attention control `.swap()` is currently ignored by Compel, but you can use it by calling `build_conditioning_tensor_for_prompt_object()` yourself, and implementing cross-attention control in your diffusion loop.
 
@@ -13,9 +13,13 @@ Note that cross-attention control `.swap()` is currently ignored by Compel, but 
 
 `pip install compel`
 
+### Documentation
+
+Documentation is [here](doc/).
+
 ### Demo
 
-see [compel-demo.ipynb](compel-demo.ipynb)
+See [compel-demo.ipynb](compel-demo.ipynb)
 
 <a target="_blank" href="https://colab.research.google.com/github/damian0815/compel/blob/main/compel-demo.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
