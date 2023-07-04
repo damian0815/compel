@@ -374,9 +374,9 @@ class EmbeddingsProvider:
     def _get_token_ranges_for_fragments(self, chunked_and_padded_token_ids: List[int], fragments: List[str]) -> List[Tuple[int, int]]:
         """
         Match token id sequences for the strings in `fragments` with token id sequences in `chunked_and_padded_token_ids`,
-         taking into account any eos and bos markers marking `self.tokenizer.max_model_length` sized chunks.
+         taking into account any eos and bos markers that indicate `self.tokenizer.max_model_length`-sized chunks.
 
-        Returns a list of tuples indicating start and end indices of each fragment's corresponding token id sequence in
+        :return: a list of tuples indicating start and end indices of each fragment's corresponding token id sequence in
          `chunked_and_padded_token_ids`.
         """
         per_fragment_token_ids = self.get_token_ids(fragments, include_start_and_end_markers=False)

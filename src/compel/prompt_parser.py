@@ -20,43 +20,6 @@ split_weighted_subpromopts()    split subprompts, normalize and weight them
 log_tokenization()              print out colour-coded tokens and warn if truncated
 '''
 
-class Prompt():
-    """
-    Mid-level structure for storing the tree-like result of parsing a prompt. A Prompt may not represent the whole of
-    the singular user-defined "prompt string" (although it can) - for example, if the user specifies a Blend, the objects
-    that are to be blended together are stored individuall as Prompt objects.
-
-    Nesting makes this object not suitable for directly tokenizing; instead call flatten() on the containing Conjunction
-    to produce a FlattenedPrompt.
-    """
-    def __init__(self, parts: list):
-        self.children = []
-        for p in parts:
-            if (type(p) is LoraWeight
-                  or type(p) is Attention
-                  or issubclass(type(p), BaseFragment)
-                  or type(p) is pp.ParseResults):
-                self.children.append(p)
-            else:
-                raise PromptParser.ParsingException(
-                    f"Prompt cannot contain {type(p).__name__} ({p}), only "
-                    f"{[c.__name__ for c in BaseFragment.__subclasses__()]} are allowed"
-                )
-
-    def __repr__(self):
-        return f"Prompt:{self.children}"
-
-    def __eq__(self, other):
-        return (type(other) is Prompt
-                and other.children == self.children)
-
-@dataclass
-class LoraWeight:
-    model: str
-    weight: float
-
-    def __repr__(self):
-        return(f"Lora('{self.model}'@{self.weight})")
 
 class BaseFragment:
     pass
@@ -109,9 +72,121 @@ class FlattenedPrompt():
                and other.children == self.children)
 
 
+class Prompt():
+    """
+    Intermediate structure for storing the tree-like result of parsing a prompt. A Prompt may not represent the whole of
+    the singular user-defined "prompt string" (although it can) - for example, if the user specifies a Blend, the objects
+    that are to be blended together are stored individually as Prompt objects.
+
+    Nesting makes this object not suitable for directly tokenizing; instead call `PromptParser.flatten()` on the
+    containing Conjunction to produce a FlattenedPrompt.
+    """
+    def __init__(self, parts: list):
+        self.children = []
+        for p in parts:
+            if (type(p) is LoraWeight
+                  or type(p) is Attention
+                  or issubclass(type(p), BaseFragment)
+                  or type(p) is pp.ParseResults):
+                self.children.append(p)
+            else:
+                raise PromptParser.ParsingException(
+                    f"Prompt cannot contain {type(p).__name__} ({p}), only "
+                    f"{[c.__name__ for c in BaseFragment.__subclasses__()]} are allowed"
+                )
+
+    def __repr__(self):
+        return f"Prompt:{self.children}"
+
+    def __eq__(self, other):
+        return (type(other) is Prompt
+                and other.children == self.children)
+
+@dataclass
+class LoraWeight:
+    """
+    Storage for information about a LoRA, requested using `.withLora(<name>, <weight>)`
+    """
+    model: str
+    weight: float
+
+    def __repr__(self):
+        return(f"Lora('{self.model}'@{self.weight})")
+
+class Blend():
+    """
+    Stores a Blend of multiple Prompts, requested using eg `("prompt 1", "prompt 2").blend(1, 1)`
+
+    To apply, build feature vectors for each of the child Prompts and then perform a weighted blend of the feature
+    vectors to produce a single feature vector that is effectively a lerp between the Prompts.
+    """
+    def __init__(self, prompts: List, weights: List[float], normalize_weights: bool=True):
+        #print("making Blend with prompts", prompts, "and weights", weights)
+        weights = [1.0]*len(prompts) if (weights is None or len(weights)==0) else list(weights)
+        if len(prompts) != len(weights):
+            raise PromptParser.ParsingException(f"while parsing Blend: mismatched prompts/weights counts {prompts}, {weights}")
+        for p in prompts:
+            if type(p) is not Prompt and type(p) is not FlattenedPrompt:
+                raise(PromptParser.ParsingException(f"{type(p)} cannot be added to a Blend, only Prompts or FlattenedPrompts"))
+            for f in p.children:
+                if isinstance(f, CrossAttentionControlSubstitute):
+                    raise(PromptParser.ParsingException(f"while parsing Blend: sorry, you cannot do .swap() as part of a Blend"))
+
+        # upcast all lists to Prompt objects
+        self.prompts = [x if (type(x) is Prompt or type(x) is FlattenedPrompt)
+                         else Prompt(x)
+                        for x in prompts]
+        self.prompts = prompts
+        self.weights = weights
+        self.normalize_weights = normalize_weights
+
+    @property
+    def wants_cross_attention_control(self):
+        # blends cannot cross-attention control
+        return False
+
+    def __repr__(self):
+        return f"Blend:{self.prompts} | weights {' ' if self.normalize_weights else '(non-normalized) '}{self.weights}"
+    def __eq__(self, other):
+        return other.__repr__() == self.__repr__()
+
+
+class Conjunction():
+    """
+    Storage for one or more Prompts, Blends, or FlattenedPrompts, requested using eg `("prompt 1", "prompt 2").and()`.
+
+    Each component should be combined at runtime to produce an output that reflects all of them at the same time. For
+    Stable Diffusion this can be achieved by concatenating the conditioning tensors for each component.
+    """
+    def __init__(self,
+                 prompts: List[Union[Prompt, Blend, FlattenedPrompt]],
+                 weights: List[float] = None,
+                 lora_weights: List[LoraWeight] = None):
+        # force everything to be a Prompt
+        #print("making conjunction with", prompts, "types", [type(p).__name__ for p in prompts])
+        self.prompts = [x if (type(x) is Prompt
+                          or type(x) is Blend
+                          or type(x) is FlattenedPrompt)
+                      else Prompt(x) for x in prompts]
+        self.weights = [1.0]*len(self.prompts) if (weights is None or len(weights)==0) else list(weights)
+        if len(self.weights) != len(self.prompts):
+            raise PromptParser.ParsingException(f"while parsing Conjunction: mismatched parts/weights counts {prompts}, {weights}")
+        self.lora_weights = lora_weights or []
+        self.type = 'AND'
+
+    def __repr__(self):
+        return f"Conjunction:{self.prompts} | type {self.type} | weights {self.weights} | loras {self.lora_weights}"
+    def __eq__(self, other):
+        return type(other) is Conjunction \
+               and other.prompts == self.prompts \
+               and other.weights == self.weights \
+               and other.lora_weights == self.lora_weights
+
+
+
 class Fragment(BaseFragment):
     """
-    A Fragment is a chunk of plain text and an optional weight. The text should be passed as-is to the CLIP tokenizer.
+    A Fragment is a chunk of plain text with an optional weight. The text should be passed as-is to the text encoder.
     """
     def __init__(self, text: str, weight: float=1):
         assert(type(text) is str)
@@ -133,7 +208,8 @@ class Attention():
     Nestable weight control for fragments. Each object in the children array may in turn be an Attention object;
     weights should be considered to accumulate as the tree is traversed to deeper levels of nesting.
 
-    Do not traverse directly; instead obtain a FlattenedPrompt by calling Flatten() on a top-level Conjunction object.
+    Do not traverse directly. Instead, obtain a FlattenedPrompt by calling `PromptParser.flatten()` on a top-level
+    Conjunction object.
     """
     def __init__(self, weight: float, children: list):
         if type(weight) is not float:
@@ -212,6 +288,7 @@ class CrossAttentionControlSubstitute(CrossAttentionControlledFragment):
                and other.options == self.options
 
 
+
 class CrossAttentionControlAppend(CrossAttentionControlledFragment):
     def __init__(self, fragment: Fragment):
         self.fragment = fragment
@@ -221,70 +298,6 @@ class CrossAttentionControlAppend(CrossAttentionControlledFragment):
         return type(other) is CrossAttentionControlAppend \
                and other.fragment == self.fragment
 
-
-class Conjunction():
-    """
-    Storage for one or more Prompts or Blends, each of which is to be separately diffused and then the results merged
-    by weighted sum in latent space.
-    """
-    def __init__(self, prompts: List, weights: List[float] = None, lora_weights: List[LoraWeight] = None):
-        # force everything to be a Prompt
-        #print("making conjunction with", prompts, "types", [type(p).__name__ for p in prompts])
-        self.prompts = [x if (type(x) is Prompt
-                          or type(x) is Blend
-                          or type(x) is FlattenedPrompt)
-                      else Prompt(x) for x in prompts]
-        self.weights = [1.0]*len(self.prompts) if (weights is None or len(weights)==0) else list(weights)
-        if len(self.weights) != len(self.prompts):
-            raise PromptParser.ParsingException(f"while parsing Conjunction: mismatched parts/weights counts {prompts}, {weights}")
-        self.lora_weights = lora_weights or []
-        self.type = 'AND'
-
-    def __repr__(self):
-        return f"Conjunction:{self.prompts} | type {self.type} | weights {self.weights} | loras {self.lora_weights}"
-    def __eq__(self, other):
-        return type(other) is Conjunction \
-               and other.prompts == self.prompts \
-               and other.weights == self.weights \
-               and other.lora_weights == self.lora_weights
-
-
-class Blend():
-    """
-    Stores a Blend of multiple Prompts. To apply, build feature vectors for each of the child Prompts and then perform a
-    weighted blend of the feature vectors to produce a single feature vector that is effectively a lerp between the
-    Prompts.
-    """
-    def __init__(self, prompts: List, weights: List[float], normalize_weights: bool=True):
-        #print("making Blend with prompts", prompts, "and weights", weights)
-        weights = [1.0]*len(prompts) if (weights is None or len(weights)==0) else list(weights)
-        if len(prompts) != len(weights):
-            raise PromptParser.ParsingException(f"while parsing Blend: mismatched prompts/weights counts {prompts}, {weights}")
-        for p in prompts:
-            if type(p) is not Prompt and type(p) is not FlattenedPrompt:
-                raise(PromptParser.ParsingException(f"{type(p)} cannot be added to a Blend, only Prompts or FlattenedPrompts"))
-            for f in p.children:
-                if isinstance(f, CrossAttentionControlSubstitute):
-                    raise(PromptParser.ParsingException(f"while parsing Blend: sorry, you cannot do .swap() as part of a Blend"))
-
-        # upcast all lists to Prompt objects
-        self.prompts = [x if (type(x) is Prompt or type(x) is FlattenedPrompt)
-                         else Prompt(x)
-                        for x in prompts]
-        self.prompts = prompts
-        self.weights = weights
-        self.normalize_weights = normalize_weights
-
-    @property
-    def wants_cross_attention_control(self):
-        # blends cannot cross-attention control
-        return False
-
-
-    def __repr__(self):
-        return f"Blend:{self.prompts} | weights {' ' if self.normalize_weights else '(non-normalized) '}{self.weights}"
-    def __eq__(self, other):
-        return other.__repr__() == self.__repr__()
 
 
 class PromptParser():
@@ -326,9 +339,9 @@ class PromptParser():
 
     def flatten(self, root: Conjunction, verbose = False) -> Conjunction:
         """
-        Flattening a Conjunction traverses all of the nested tree-like structures in each of its Prompts or Blends,
+        Flatten a Conjunction by traversing all of the nested tree-like structures in each of its Prompts or Blends,
         producing from each of these walks a linear sequence of Fragment or CrossAttentionControlSubstitute objects
-        that can be readily tokenized without the need to walk a complex tree structure.
+        that can be readily tokenized without the need to wrangle a complex tree structure.
 
         :param root: The Conjunction to flatten.
         :return: A Conjunction containing the result of flattening each of the prompts in the passed-in root.
@@ -426,6 +439,14 @@ class PromptParser():
 
 
 def build_parser_syntax(attention_plus_base: float, attention_minus_base: float):
+    """
+    Build pyparsing parser to handle prompt syntax.
+
+    Here be dragons. If you make any changes in here it is *strongly* recommended to follow a strict TDD approach:
+    write a new unit test in `test/test_prompt_parser.py` that reflects the change you want to make, and ensure that
+    all unit tests continue to pass with the modificaton you're making.
+    """
+
     def make_operator_object(x):
         #print('making operator for', x)
         target = x[0]

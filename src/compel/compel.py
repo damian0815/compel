@@ -47,8 +47,8 @@ class Compel:
             (default) or REMOVEing them (legacy behaviour; messes up position embeddings of tokens following).
         `use_penultimate_clip_layer`: If True, use the penultimate hidden layer output of the CLIP text encoder's output,
             rather than the final hidden layer output.
-        `device`: The torch device on which the tensors should be created. If a device is not specified, it'll use the
-            device the `text_encoder` is on (at the moment of calling `build_conditioning_tensor()`).
+        `device`: The torch device on which the tensors should be created. If a device is not specified, the device will
+            be the same as that of the `text_encoder` at the moment when `build_conditioning_tensor()` is called.
         """
         self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
                                                         text_encoder=text_encoder,
@@ -66,6 +66,10 @@ class Compel:
         return self._device if self._device else self.conditioning_provider.text_encoder.device
 
     def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str='') -> ConditioningScheduler:
+        """
+        Return a ConditioningScheduler object that provides conditioning tensors for different diffusion steps (currently
+        not fully implemented).
+        """
         positive_conditioning = self.build_conditioning_tensor(positive_prompt)
         negative_conditioning = self.build_conditioning_tensor(negative_prompt)
         [positive_conditioning, negative_conditioning] = self.pad_conditioning_tensors_to_same_length(
@@ -75,12 +79,23 @@ class Compel:
                                            negative_conditioning=negative_conditioning)
 
     def build_conditioning_tensor(self, text: str) -> torch.Tensor:
+        """
+        Build a conditioning tensor by parsing the text for Compel syntax, constructing a Conjunction, and then
+        building a conditioning tensor from that Conjunction.
+        """
         conjunction = self.parse_prompt_string(text)
         conditioning, _ = self.build_conditioning_tensor_for_conjunction(conjunction)
         return conditioning
 
     @torch.no_grad()
     def __call__(self, text: Union[str, List[str]]) -> torch.FloatTensor:
+        """
+        Take a string or a list of strings and build conditioning tensors to match.
+
+        If multiple strings are passed, the resulting tensors will be padded until they have the same length.
+
+        :return: A tensor consisting of conditioning tensors for each of the passed-in strings, concatenated along dim 0.
+        """
         if not isinstance(text, list):
             text = [text]
 
@@ -95,6 +110,9 @@ class Compel:
 
     @classmethod
     def parse_prompt_string(cls, prompt_string: str) -> Conjunction:
+        """
+        Parse the given prompt string and return a structured Conjunction object that represents the prompt it contains.
+        """
         pp = PromptParser()
         conjunction = pp.parse_conjunction(prompt_string)
         return conjunction
@@ -110,23 +128,13 @@ class Compel:
         """
         return self.conditioning_provider.tokenizer.tokenize(text)
 
-    def build_conditioning_tensor_for_prompt_object(self, prompt: Union[Blend, FlattenedPrompt],
-                                                    ) -> Tuple[torch.Tensor, dict]:
-        """
-
-        """
-        if type(prompt) is Blend:
-            return self._get_conditioning_for_blend(prompt), {}
-        elif type(prompt) is FlattenedPrompt:
-            if prompt.wants_cross_attention_control:
-                cac_args = self._get_conditioning_for_cross_attention_control(prompt)
-                return cac_args.original_conditioning, { 'cross_attention_control': cac_args }
-            else:
-                return self._get_conditioning_for_flattened_prompt(prompt), {}
-
-        raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
 
     def build_conditioning_tensor_for_conjunction(self, conjunction: Conjunction) -> Tuple[torch.Tensor, dict]:
+        """
+        Build a conditioning tensor for the given Conjunction object.
+        :return: A tuple of (conditioning tensor, options dict). The contents of the options dict depends on the prompt,
+        at the moment it is only used for returning cross-attention control conditioning data (`.swap()`).
+        """
         if len(conjunction.prompts) > 1 and conjunction.type != 'AND':
             raise ValueError("Only AND conjunctions are supported by build_conditioning_tensor()")
         # concatenate each prompt in the conjunction (typically there will only be 1)
@@ -146,12 +154,38 @@ class Compel:
         return torch.concat(to_concat, dim=1), options
 
 
+    def build_conditioning_tensor_for_prompt_object(self, prompt: Union[Blend, FlattenedPrompt],
+                                                    ) -> Tuple[torch.Tensor, dict]:
+        """
+        Build a conditioning tensor for the given prompt object (either a Blend or a FlattenedPrompt).
+        """
+        if type(prompt) is Blend:
+            return self._get_conditioning_for_blend(prompt), {}
+        elif type(prompt) is FlattenedPrompt:
+            if prompt.wants_cross_attention_control:
+                cac_args = self._get_conditioning_for_cross_attention_control(prompt)
+                return cac_args.original_conditioning, { 'cross_attention_control': cac_args }
+            else:
+                return self._get_conditioning_for_flattened_prompt(prompt), {}
+
+        raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
+
+
+
     def pad_conditioning_tensors_to_same_length(self, conditionings: List[torch.Tensor],
                                                 ) -> List[torch.Tensor]:
         """
-        If `truncate_long_prompts` was set to False on initialization, conditioning tensors do not have a fixed length.
-        This is a problem when using a negative and a positive prompt to condition the diffusion process. This function
-        pads either c0 or c1 if necessary to ensure they both have the same length, returning the padded c0 and c1.
+        If `truncate_long_prompts` was set to False on initialization, or if your prompt includes a `.and()` operator,
+        conditioning tensors do not have a fixed length. This is a problem when using a negative and a positive prompt
+        to condition the diffusion process. This function pads any of the passed-in tensors, as necessary, to ensure
+        they all have the same length, returning the padded tensors in the same order they are passed.
+
+        Example:
+            ``` python
+            embeds = compel('("a cat playing in the forest", "an impressionist oil painting").and()')
+            negative_embeds = compel("ugly, deformed, distorted")
+            [embeds, negative_embeds] = compel.pad_conditioning_tensors_to_same_length([embeds, negative_embeds])
+            ```
         """
         c0_shape = conditionings[0].shape
         if not all([len(c.shape) == len(c0_shape) for c in conditionings]):
@@ -166,7 +200,6 @@ class Compel:
 
         if not all([c.shape[0] == c0_shape[0] and c.shape[2] == c0_shape[2] for c in conditionings]):
             raise ValueError(f"All conditioning tensors must have the same batch size ({c0_shape[0]}) and number of embeddings per token ({c0_shape[1]}")
-
 
         max_token_count = max([c.shape[1] for c in conditionings])
         # if necessary, pad shorter tensors out with an emptystring tensor
