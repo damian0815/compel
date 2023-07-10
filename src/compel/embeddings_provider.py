@@ -378,6 +378,29 @@ class EmbeddingsProvider:
 
         return weighted_z
 
+    def _encode_token_ids_to_embeddings(self, token_ids: torch.Tensor,
+                                        attention_mask: Optional[torch.Tensor]=None) -> torch.Tensor:
+        text_encoder_output = self.text_encoder(token_ids,
+                                                attention_mask,
+                                                output_hidden_states=self.use_penultimate_clip_layer,
+                                                return_dict=True)
+
+        if self.requires_pooled:
+            pooled = text_encoder_output.pooler_output if "pooler_output" in text_encoder_output else text_encoder_output.text_embeds
+        else:
+            pooled = None
+
+        if self.use_penultimate_clip_layer:
+            # needs normalizing
+            penultimate_hidden_state = text_encoder_output.hidden_states[-2]
+
+            if self.use_penultimate_layer_norm:
+                penultimate_hidden_state = self.text_encoder.text_model.final_layer_norm(penultimate_hidden_state)
+            return (penultimate_hidden_state, pooled)
+        else:
+            # already normalized
+            return (text_encoder_output.last_hidden_state, pooled)
+
     def _get_token_ranges_for_fragments(self, chunked_and_padded_token_ids: List[int], fragments: List[str]) -> List[Tuple[int, int]]:
         """
         Match token id sequences for the strings in `fragments` with token id sequences in `chunked_and_padded_token_ids`,
@@ -511,26 +534,3 @@ class EmbeddingsProviderMulti:
             outputs += (pooled,)
 
         return outputs
-
-    def _encode_token_ids_to_embeddings(self, token_ids: torch.Tensor,
-                                        attention_mask: Optional[torch.Tensor]=None) -> torch.Tensor:
-        text_encoder_output = self.text_encoder(token_ids,
-                                                attention_mask,
-                                                output_hidden_states=self.use_penultimate_clip_layer,
-                                                return_dict=True)
-
-        if self.requires_pooled:
-            pooled = text_encoder_output.pooler_output if "pooler_output" in text_encoder_output else text_encoder_output.text_embeds
-        else:
-            pooled = None
-
-        if self.use_penultimate_clip_layer:
-            # needs normalizing
-            penultimate_hidden_state = text_encoder_output.hidden_states[-2]
-
-            if self.use_penultimate_layer_norm:
-                penultimate_hidden_state = self.text_encoder.text_model.final_layer_norm(penultimate_hidden_state)
-            return (penultimate_hidden_state, pooled)
-        else:
-            # already normalized
-            return (text_encoder_output.last_hidden_state, pooled)
