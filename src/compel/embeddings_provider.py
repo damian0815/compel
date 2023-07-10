@@ -182,12 +182,9 @@ class EmbeddingsProvider:
         #print(f"assembled all tokens into tensor of shape {batch_z.shape}")
 
         if should_return_tokens:
-            outputs += (batch_tokens,)
-
-        if len(outputs) == 1:
-            return outputs[0]
-
-        return outputs
+            return batch_z, batch_tokens
+        else:
+            return batch_z
 
     def get_token_ids(self, texts: List[str], include_start_and_end_markers: bool = True, padding: str = 'do_not_pad') -> List[List[int]]:
         """
