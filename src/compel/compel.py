@@ -30,6 +30,7 @@ class Compel:
                  downweight_mode: DownweightMode = DownweightMode.MASK,
                  use_penultimate_clip_layer: Union[bool, List[bool]]=False,
                  use_penultimate_layer_norm: Union[bool, List[bool]]=False,
+                 requires_pooled: Union[bool, List[bool]]=False,
                  device: Optional[str] = None
                  ):
         """
@@ -66,6 +67,7 @@ class Compel:
                                                             downweight_mode=downweight_mode,
                                                             use_penultimate_clip_layer=use_penultimate_clip_layer,
                                                             use_penultimate_layer_norm=use_penultimate_layer_norm,
+                                                            requires_pooled=requires_pooled,
                                                             )
         else:
             self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
@@ -77,8 +79,10 @@ class Compel:
                                                             downweight_mode=downweight_mode,
                                                             use_penultimate_clip_layer=use_penultimate_clip_layer,
                                                             use_penultimate_layer_norm=use_penultimate_layer_norm,
+                                                            requires_pooled=requires_pooled,
                                                             )
-            self._device = device
+
+        self._device = device
 
     @property
     def device(self):
@@ -105,14 +109,15 @@ class Compel:
         conjunction = self.parse_prompt_string(text)
         conditioning, _ = self.build_conditioning_tensor_for_conjunction(conjunction)
 
-        if return_pooled:
-            pooled = self.conditioning_provider.get_pooled(text)
+        pooled = self.conditioning_provider.maybe_get_pooled([text])
+
+        if return_pooled and pooled is not None:
             return conditioning, pooled
 
         return conditioning
 
     @torch.no_grad()
-    def __call__(self, text: Union[str, List[str]], return_pooled: False) -> torch.FloatTensor:
+    def __call__(self, text: Union[str, List[str]]) -> torch.FloatTensor:
         """
         Take a string or a list of strings and build conditioning tensors to match.
 
@@ -126,17 +131,19 @@ class Compel:
         cond_tensor = []
         pooled = []
         for text_input in text:
-            output = self.build_conditioning_tensor(text_input, return_pooled=return_pooled)
-            cond_tensor.append(output[0] if return_pooled else output)
+            output = self.build_conditioning_tensor(text_input, return_pooled=True)
 
-            if return_pooled:
+            requires_pooled = len(output) > 1
+            cond_tensor.append(output[0] if requires_pooled else output)
+
+            if requires_pooled:
                 pooled.append(output[1])
 
         cond_tensor = self.pad_conditioning_tensors_to_same_length(conditionings=cond_tensor)
         cond_tensor = torch.cat(cond_tensor)
 
-        if return_pooled:
-            cond_tensor, torch.cat(pooled)
+        if len(pooled) > 0:
+            return cond_tensor, torch.cat(pooled)
 
         return cond_tensor
 

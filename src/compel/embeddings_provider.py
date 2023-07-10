@@ -31,6 +31,7 @@ class EmbeddingsProvider:
                  downweight_mode: DownweightMode = DownweightMode.MASK,
                  use_penultimate_clip_layer: bool=False,
                  use_penultimate_layer_norm: bool=True,
+                 requires_pooled: bool=False,
                  ):
         """
         `tokenizer`: converts strings to lists of int token ids
@@ -53,6 +54,7 @@ class EmbeddingsProvider:
         self.downweight_mode = downweight_mode
         self.use_penultimate_clip_layer = use_penultimate_clip_layer
         self.use_penultimate_layer_norm = use_penultimate_layer_norm 
+        self.requires_pooled = requires_pooled
 
         # by default always use float32
         self.get_dtype_for_device = dtype_for_device_getter
@@ -223,11 +225,16 @@ class EmbeddingsProvider:
 
         return result
 
-    def get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
+    def maybe_get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
+        if not self.requires_pooled:
+            return None
+        
         token_ids = self.get_token_ids(texts, padding="max_length")
-        text_encoder_output = self.text_encoder(token_ids, attention_mask, return_dict=True)
+        token_ids = torch.tensor(token_ids, dtype=torch.long).to(self.text_encoder.device)
 
-        pooled = text_encoder_output.pooler_output if "pooler_output" in text_encoder_output else text_encoder_output.text_embeds
+        text_encoder_output = self.text_encoder(token_ids, attention_mask, return_dict=True)
+        pooled = text_encoder_output.text_embeds
+
         return pooled
 
     def get_token_ids_and_expand_weights(self, fragments: List[str], weights: List[float], device: str
@@ -458,16 +465,18 @@ class EmbeddingsProviderMulti:
                 truncate: bool = True,
                 padding_attention_mask_value: int = 1,
                 downweight_mode: DownweightMode = DownweightMode.MASK,
-                use_penultimate_clip_layer: List[bool]=False,
-                use_penultimate_layer_norm: List[bool]=True,
+                use_penultimate_clip_layer: Union[List[bool], bool]=False,
+                use_penultimate_layer_norm: Union[List[bool], bool]=True,
+                requires_pooled: Union[List[bool], bool]=False,
                 ):
 
         use_penultimate_clip_layer = len(text_encoders) * [use_penultimate_clip_layer] if not isinstance(use_penultimate_clip_layer, (list, tuple)) else use_penultimate_clip_layer
         use_penultimate_layer_norm = len(text_encoders) * [use_penultimate_layer_norm] if not isinstance(use_penultimate_layer_norm, (list, tuple)) else use_penultimate_layer_norm
+        requires_pooled = len(text_encoders) * [requires_pooled] if not isinstance(requires_pooled, (list, tuple)) else requires_pooled
 
         self.embedding_providers = [
-            EmbeddingsProvider(tokenizer, text_encoder, textual_inversion_manager, dtype_for_device_getter, truncate, padding_attention_mask_value, downweight_mode, clip_layer, clip_norm)
-            for tokenizer, text_encoder, clip_layer, clip_norm in zip(tokenizers, text_encoders, use_penultimate_clip_layer, use_penultimate_layer_norm)
+            EmbeddingsProvider(tokenizer, text_encoder, textual_inversion_manager, dtype_for_device_getter, truncate, padding_attention_mask_value, downweight_mode, clip_layer, clip_norm, pooled)
+            for tokenizer, text_encoder, clip_layer, clip_norm, pooled in zip(tokenizers, text_encoders, use_penultimate_clip_layer, use_penultimate_layer_norm, requires_pooled)
         ]
 
     @property
@@ -483,8 +492,8 @@ class EmbeddingsProviderMulti:
         # so for simplicity, we just return `get_token_ids` of the first tokenizer
         return self.embedding_providers[0].get_token_ids(self, *args, **kwargs)
 
-    def get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
-        pooled = [provider.get_pooled(texts, attention_mask) if isinstance(provider, CLIPTextModelWithProjection) else None for provider in self.embedding_providers]
+    def maybe_get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
+        pooled = [provider.maybe_get_pooled(texts, attention_mask) for provider in self.embedding_providers]
         pooled = [p for p in pooled if p is not None]
 
         if len(pooled) == 0:

@@ -75,6 +75,10 @@ class DummyTransformer:
             def hidden_states(self):
                 return [-self.last_hidden_state, self.last_hidden_state]
 
+            @property
+            def text_embeds(self):
+                return self.last_hidden_state[:, -1, :]
+
         o = EmbeddingsObject(embeddings)
         return o
 
@@ -108,8 +112,12 @@ class DummyTokenizer():
                          else x
                          for x in tokenized]
         padding_strategy = kwargs.get('padding', 'do_not_pad')
-        if padding_strategy != 'do_not_pad':
-            raise Exception(f"for unit tests only 'do_not_pad' is supported as a padding strategy (got '{padding_strategy}')")
+        if padding_strategy not in ['do_not_pad', 'max_length']:
+            raise Exception(f"for unit tests only 'do_not_pad' and 'max_length' is supported as a padding strategy (got '{padding_strategy}')")
+
+        if padding_strategy == "max_length":
+            tokenized = [(tokens[:-1] + (self.model_max_length - len(tokens)) * [self.pad_token_id] + tokens[1:]) for tokens in tokenized]
+
         return {'input_ids': tokenized}
 
     def convert_tokens_to_ids(self, token_str):
