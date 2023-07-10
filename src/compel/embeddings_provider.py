@@ -53,6 +53,7 @@ class EmbeddingsProvider:
         self.padding_attention_mask_value = padding_attention_mask_value
         self.downweight_mode = downweight_mode
         self.use_penultimate_clip_layer = use_penultimate_clip_layer
+        self.use_penultimate_layer_norm = use_penultimate_layer_norm 
 
         self.requires_pooled = requires_pooled 
 
@@ -193,7 +194,7 @@ class EmbeddingsProvider:
 
         return outputs
 
-    def get_token_ids(self, texts: List[str], include_start_and_end_markers: bool = True) -> List[List[int]]:
+    def get_token_ids(self, texts: List[str], include_start_and_end_markers: bool = True, padding: str = 'do_not_pad') -> List[List[int]]:
         """
         Convert a list of strings like `["a cat", "a dog", "monkey riding a bicycle"]` into a list of lists of token
         ids like `[[bos, 0, 1, eos], [bos, 0, 2, eos], [bos, 3, 4, 0, 5, eos]]`. bos/eos markers are skipped if
@@ -210,7 +211,7 @@ class EmbeddingsProvider:
         token_ids_list = self.tokenizer(
             texts,
             truncation=self.truncate_to_model_max_length,
-            padding='do_not_pad',
+            padding=padding,
             return_tensors=None,  # just give me lists of ints
         )['input_ids']
 
@@ -229,6 +230,16 @@ class EmbeddingsProvider:
             result.append(token_ids)
 
         return result
+
+    def maybe_get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
+        if not self.requires_pooled:
+            return None
+
+        token_ids = self.get_token_ids(texts, padding="max_length")
+        text_encoder_output = self.text_encoder(token_ids, attention_mask, return_dict=True)
+
+        pooled = text_encoder_output.pooler_output if "pooler_output" in text_encoder_output else text_encoder_output.text_embeds
+        return pooled
 
     def get_token_ids_and_expand_weights(self, fragments: List[str], weights: List[float], device: str
                                          ) -> (torch.Tensor, torch.Tensor, torch.Tensor):
@@ -312,7 +323,6 @@ class EmbeddingsProvider:
                                         token_ids: torch.Tensor,
                                         per_token_weights: torch.Tensor,
                                         attention_mask: Optional[torch.Tensor] = None,
-                                        should_return_pooled: bool = False,
                                         device: Optional[str] = None) -> torch.Tensor:
         """
         :param token_ids: A tensor of shape `n*[self.max_length]` containing token IDs (ints) where n is some arbitrary
@@ -337,9 +347,8 @@ class EmbeddingsProvider:
                                        [self.tokenizer.eos_token_id] +
                                        [self.tokenizer.pad_token_id] * (self.max_token_count - 2),
                                        dtype=torch.int, device=device).unsqueeze(0)
-        empty_z, _ = self._encode_token_ids_to_embeddings(empty_token_ids)
+        empty_z = self._encode_token_ids_to_embeddings(empty_token_ids)
         weighted_z = None
-        pooled = None
 
         chunk_size = self.max_token_count
         while chunk_start_index < token_ids.shape[0]:
@@ -352,7 +361,7 @@ class EmbeddingsProvider:
                 else None
             )
 
-            z, this_pooled = self._encode_token_ids_to_embeddings(chunk_token_ids, chunk_attention_mask)
+            z = self._encode_token_ids_to_embeddings(chunk_token_ids, chunk_attention_mask)
             batch_weights_expanded = chunk_per_token_weights.reshape(
                 chunk_per_token_weights.shape + (1,)).expand(z.shape).to(z)
 
@@ -364,17 +373,7 @@ class EmbeddingsProvider:
                 else torch.cat([weighted_z, this_weighted_z], dim=1)
             )
 
-            if pooled is not None:
-                pooled = (
-                    this_pooled
-                    if pooled is None
-                    else torch.mean([pooled, this_pooled], dim=1)
-                )
-
             chunk_start_index += chunk_size
-
-        if should_return_pooled:
-            return weighted_z, pooled
 
         return weighted_z
 
@@ -385,21 +384,16 @@ class EmbeddingsProvider:
                                                 output_hidden_states=self.use_penultimate_clip_layer,
                                                 return_dict=True)
 
-        if self.requires_pooled:
-            pooled = text_encoder_output.pooler_output if "pooler_output" in text_encoder_output else text_encoder_output.text_embeds
-        else:
-            pooled = None
-
         if self.use_penultimate_clip_layer:
             # needs normalizing
             penultimate_hidden_state = text_encoder_output.hidden_states[-2]
 
             if self.use_penultimate_layer_norm:
                 penultimate_hidden_state = self.text_encoder.text_model.final_layer_norm(penultimate_hidden_state)
-            return (penultimate_hidden_state, pooled)
+            return penultimate_hidden_state
         else:
             # already normalized
-            return (text_encoder_output.last_hidden_state, pooled)
+            return text_encoder_output.last_hidden_state
 
     def _get_token_ranges_for_fragments(self, chunked_and_padded_token_ids: List[int], fragments: List[str]) -> List[Tuple[int, int]]:
         """
@@ -497,40 +491,38 @@ class EmbeddingsProviderMulti:
         # so for simplicity, we just return `get_token_ids` of the first tokenizer
         return self.embedding_providers[0].get_token_ids(self, *args, **kwargs)
 
+    def maybe_get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
+        pooled = [provider.maybe_get_pooled(texts, attention_mask) for provider in self.embedding_providers]
+        pooled = [p for p in pooled if p is not None]
+
+        if len(pooled) == 0:
+            return None
+
+        return torch.cat(pooled, dim=-1)
+
     def get_embeddings_for_weighted_prompt_fragments(self,
                                                      text_batch: List[List[str]],
                                                      fragment_weights_batch: List[List[float]],
                                                      should_return_tokens: bool = False,
-                                                     should_return_pooled: bool = False,
                                                      device='cpu',
                                  ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
 
-        outputs = [provider.get_embeddings_for_weighted_prompt_fragments(text_batch, fragment_weights_batch, should_return_tokens=should_return_tokens, should_return_pooled=should_return_pooled, device=device) for provider in self.embedding_providers]
+        outputs = [provider.get_embeddings_for_weighted_prompt_fragments(text_batch, fragment_weights_batch, should_return_tokens=should_return_tokens, device=device) for provider in self.embedding_providers]
 
-        pooled_list = []
         text_embeddings_list = []
         tokens = []
 
-        for i, output in enumerate(outputs):
+        for output in outputs:
             text_embeddings_list.append(output[0])
 
             if should_return_tokens:
                 tokens.append(output[1])
 
-            if should_return_pooled:
-                pooled_list.append(output[-1])
-
         text_embeddings = torch.cat(text_embeddings_list, dim=-1)
-
-        pooled_list = [p for p in pooled_list if p is not None]
-        pooled = torch.cat(pooled_list, dim=-1) if len(pooled_list) > 0 else None
 
         outputs = (text_embeddings,)
 
         if should_return_tokens:
             outputs += (tokens,)
-
-        if should_return_pooled:
-            outputs += (pooled,)
 
         return outputs
