@@ -180,7 +180,6 @@ class EmbeddingsProvider:
 
         # should have shape (B, 77, 768)
         #print(f"assembled all tokens into tensor of shape {batch_z.shape}")
-        outputs = (batch_z,)
 
         if should_return_tokens:
             outputs += (batch_tokens,)
