@@ -79,7 +79,7 @@ class EmbeddingsProvider:
                                                      text_batch: List[List[str]],
                                                      fragment_weights_batch: List[List[float]],
                                                      should_return_tokens: bool = False,
-                                                     device='cpu',
+                                                     device='cpu'
                                  ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
 
@@ -97,7 +97,6 @@ class EmbeddingsProvider:
 
         batch_z = None
         batch_tokens = None
-
         for fragments, weights in zip(text_batch, fragment_weights_batch):
 
             # First, weight tokens in individual fragments by scaling the feature vectors as requested (effectively
@@ -112,7 +111,7 @@ class EmbeddingsProvider:
 
             # handle weights >=1
             tokens, per_token_weights, mask = self.get_token_ids_and_expand_weights(fragments, weights, device=device)
-            base_embedding = self.build_weighted_embedding_tensor(tokens, per_token_weights, mask)[0]
+            base_embedding = self.build_weighted_embedding_tensor(tokens, per_token_weights, mask, device=device)
 
             # this is our starting point
             embeddings = base_embedding.unsqueeze(0)
