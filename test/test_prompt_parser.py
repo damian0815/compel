@@ -63,6 +63,17 @@ class PromptParserTestCase(unittest.TestCase):
         self.assertEqual(make_weighted_conjunction([('pretty flowers', 1.1), (', the flames are too hot', 1)]),
                          parse_prompt("(pretty flowers)+, the flames are too hot"))
 
+
+    def test_wayward_periods(self):
+        self.assertEqual(
+            make_weighted_conjunction([('a text .', 0.7), ('.', 1.0), ('a second text .', 0.8)]),
+            parse_prompt("(a text.)0.7. (a second text.)0.8"))
+
+        self.assertEqual(
+            make_weighted_conjunction([('a text .', 0.7), ('.', 1.0), ('a second text .', 0.8)]),
+            parse_prompt("\"a text.\"0.7. \"a second text.\"0.8"))
+
+
     def test_no_parens_attention_runon(self):
         self.assertEqual(make_weighted_conjunction([('fire', 1.0), ('flames', pow(1.1, 2))]), parse_prompt("fire flames++"))
         self.assertEqual(make_weighted_conjunction([('fire', 1.0), ('flames', pow(0.9, 2))]), parse_prompt("fire flames--"))
@@ -330,7 +341,9 @@ class PromptParserTestCase(unittest.TestCase):
                                                                                        [Fragment('dog', 1)]),
                                                        Fragment('eating a', 1),
                                                        CrossAttentionControlSubstitute([Fragment('hotdog', 1)], [
-                                                           Fragment('hotdog', pow(1.1, 4))])
+                                                           Fragment('hotdog', pow(1.1, 4))],
+                                                                                       options={'s_start': 0, 's_end': 0.2062994740159002,
+                                                                                                't_start': 0.2, 't_end': 1.0})
                                                        ])]),
                          parse_prompt("a cat.swap(dog) eating a hotdog.swap(hotdog++++, shape_freedom=0.5)"))
 
@@ -339,7 +352,12 @@ class PromptParserTestCase(unittest.TestCase):
                                                                                        [Fragment('dog', 1)]),
                                                        Fragment('eating a', 1),
                                                        CrossAttentionControlSubstitute([Fragment('hotdog', 1)], [
-                                                           Fragment('hotdog', pow(1.1, 4))])
+                                                           Fragment('hotdog', pow(1.1, 4))],
+                                                                                       options={'s_start': 0,
+                                                                                                's_end': 0.2062994740159002,
+                                                                                                't_start': 0.2,
+                                                                                                't_end': 1.0}
+                                                                                       )
                                                        ])]),
                          parse_prompt("a cat.swap(dog) eating a hotdog.swap(\"hotdog++++\", shape_freedom=0.5)"))
 
@@ -348,7 +366,12 @@ class PromptParserTestCase(unittest.TestCase):
                                                                                        [Fragment('dog', 1)]),
                                                        Fragment('eating a', 1),
                                                        CrossAttentionControlSubstitute([Fragment('hotdog', 1)], [
-                                                           Fragment('h(o)tdog', pow(1.1, 4))])
+                                                           Fragment('h(o)tdog', pow(1.1, 4))],
+                                                                                       options={'s_start': 0,
+                                                                                                's_end': 0.2062994740159002,
+                                                                                                't_start': 0.2,
+                                                                                                't_end': 1.0}
+                                                                                       )
                                                        ])]),
                          parse_prompt("a cat.swap(dog) eating a hotdog.swap(h\(o\)tdog++++, shape_freedom=0.5)"))
         self.assertEqual(Conjunction([FlattenedPrompt([Fragment('a', 1),
@@ -356,7 +379,12 @@ class PromptParserTestCase(unittest.TestCase):
                                                                                        [Fragment('dog', 1)]),
                                                        Fragment('eating a', 1),
                                                        CrossAttentionControlSubstitute([Fragment('hotdog', 1)], [
-                                                           Fragment('h(o)tdog', pow(1.1, 4))])
+                                                           Fragment('h(o)tdog', pow(1.1, 4))],
+                                                                                       options={'s_start': 0,
+                                                                                                's_end': 0.2062994740159002,
+                                                                                                't_start': 0.2,
+                                                                                                't_end': 1.0}
+                                                                                       )
                                                        ])]),
                          parse_prompt("a cat.swap(dog) eating a hotdog.swap(\"h\(o\)tdog++++\", shape_freedom=0.5)"))
 
@@ -365,7 +393,12 @@ class PromptParserTestCase(unittest.TestCase):
                                                                                        [Fragment('dog', 1)]),
                                                        Fragment('eating a', 1),
                                                        CrossAttentionControlSubstitute([Fragment('hotdog', 1)], [
-                                                           Fragment('h(o)tdog', pow(0.9, 1))])
+                                                           Fragment('h(o)tdog', pow(0.9, 1))],
+                                                                                       options={'s_start': 0,
+                                                                                                's_end': 0.2062994740159002,
+                                                                                                't_start': 0.2,
+                                                                                                't_end': 1.0}
+                                                                                       )
                                                        ])]),
                          parse_prompt("a cat.swap(dog) eating a hotdog.swap(h\(o\)tdog-, shape_freedom=0.5)"))
 
@@ -525,16 +558,41 @@ class PromptParserTestCase(unittest.TestCase):
     def test_lora(self):
         self.assertNotEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])]),
                          parse_prompt("mountain man withLora(hairy, 0.5)", verbose=False))
-        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0), LoraWeight('hairy', 0.5)])]),
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 1)]),
+                         parse_prompt("mountain man withLora(hairy)", verbose=False))
+        self.assertNotEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])]),
+                         parse_prompt("mountain man useLora(hairy, 0.5)", verbose=False))
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 1)]),
+                         parse_prompt("mountain man useLora(hairy)", verbose=False))
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 0.5)]),
                          parse_prompt("mountain man withLora(hairy, 0.5)", verbose=False))
-        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0), LoraWeight('hairy', 0.5)])]),
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 0.5)]),
                          parse_prompt("withLora(hairy, 0.5) mountain man", verbose=False))
-        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0), LoraWeight('hairy', 0.5)])]),
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[LoraWeight('hairy', 0.5)]),
                          parse_prompt("mountain withLora(hairy, 0.5) man", verbose=False))
-        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0),
+        self.assertEqual(Conjunction([FlattenedPrompt([("mountain man", 1.0)])], lora_weights=[
                                                        LoraWeight('hairy', 0.5),
-                                                       LoraWeight('ugly', 0.2)])]),
+                                                       LoraWeight('ugly', 0.2)]),
                          parse_prompt("mountain withLora(hairy, 0.5) man withLora(ugly, 0.2)", verbose=False))
+
+    def test_blend_and_lora(self):
+        self.assertEqual(Conjunction([Blend([FlattenedPrompt([("mountain", 1.0)]), FlattenedPrompt([("man", 1.0)])],
+                                            [1.0,1.0])],
+                                            lora_weights=[LoraWeight('hairy', 0.5)]),
+                         parse_prompt('("mountain", "man").blend() withLora(hairy, 0.5)',
+                         verbose=False))
+
+        self.assertEqual(Conjunction([Blend([FlattenedPrompt([("mountain", 1.0)]), FlattenedPrompt([("man", 1.0)])],
+                                            [1.0,1.0])],
+                                            lora_weights=[LoraWeight('hairy', 0.5)]),
+                         parse_prompt('("mountain withLora(hairy, 0.5)", "man").blend()',
+                         verbose=False))
+
+        self.assertEqual(Conjunction([Blend([FlattenedPrompt([("mountain", 1.0)]), FlattenedPrompt([("man", 1.0)])],
+                                            [1.0,1.0])],
+                                            lora_weights=[LoraWeight('hairy', 0.5)]),
+                         parse_prompt('("mountain", "man withLora(hairy, 0.5)").blend()',
+                         verbose=False))
 
 
     def test_single(self):
@@ -546,9 +604,24 @@ class PromptParserTestCase(unittest.TestCase):
                                                            [Fragment("skateboard", pow(1.1, 2))])
                                                        ])
                                       ], weights=[0.5, 0.5]),
-                         parse_prompt("(\"mountain man\", \"a person with a hat (riding a bicycle.swap(skateboard))++\").and(0.5, 0.5)"))
+                         parse_prompt(
+                             "(\"mountain man\", \"a person with a hat (riding a bicycle.swap(skateboard))++\").and(0.5, 0.5)"
+                         ))
         pass
 
+
+    def test_bad_auto1111_syntax(self):
+        self.assertEqual(Conjunction([FlattenedPrompt([("happy camper:0 . 3", 1.0)])]),
+                         parse_prompt("(happy camper:0.3)"))
+
+    def test_numbers_to_floats(self):
+        self.assertEqual(Conjunction([FlattenedPrompt([("test1 , 1test , test1test", 1.0)])]),
+                        parse_prompt("(test1, 1test, test1test)"))
+
+
+    def test_commas_and_whitespace(self):
+        self.assertEqual(Conjunction([FlattenedPrompt([("middle age,", 1.0), ("fantasy", pow(1.1, 2)), ("style", 1)])]),
+                         parse_prompt("middle age,fantasy++ style"))
 
 if __name__ == '__main__':
     unittest.main()

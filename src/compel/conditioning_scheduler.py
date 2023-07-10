@@ -5,7 +5,7 @@ import torch
 __all__ = ["ConditioningScheduler", "Conditioning", "StaticConditioningScheduler"]
 
 @dataclass
-class Conditioning():
+class Conditioning:
     """
     Conditioning. In all examples `B` is batch size, `77` is the text encoder's max token length,
     and `token_dim` is 768 for SD1 and 1280 for SD2.
@@ -14,7 +14,7 @@ class Conditioning():
     negative_conditioning: torch.Tensor # shape [B x 77 x token_dim]
 
 
-class ConditioningScheduler():
+class ConditioningScheduler:
     """
     Provides a mechanism to control which processes to apply for any given step of a Stable Diffusion generation.
     """

@@ -12,7 +12,7 @@ pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.
 prompts = ["a cat playing with a ball++ in the forest", "a cat playing with a ball in the forest"]
 
 compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
-prompt_embeds = torch.cat([compel.build_conditioning_tensor(prompt) for prompt in prompts])
+prompt_embeds = compel(prompts)
 images = pipeline(prompt_embeds=prompt_embeds, num_inference_steps=10, width=256, height=256).images
 print(images)
 
