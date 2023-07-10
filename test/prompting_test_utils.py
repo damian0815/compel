@@ -64,12 +64,8 @@ class DummyTransformer:
                 self.last_hidden_state = last_hidden_state
 
             def __getitem__(self, item):
-                if item == 0:
-                    return self.last_hidden_state[:, -1, :]
-                if item == 1:
-                    return self.last_hidden_state
-                if item == 2:
-                    return 2 * [self.last_hidden_state]
+                assert item == 0
+                return self.last_hidden_state
 
             @property
             def hidden_states(self):
