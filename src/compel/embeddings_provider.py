@@ -366,7 +366,6 @@ class EmbeddingsProvider:
                 if weighted_z is None
                 else torch.cat([weighted_z, this_weighted_z], dim=1)
             )
-
             chunk_start_index += chunk_size
 
         return weighted_z
@@ -377,7 +376,6 @@ class EmbeddingsProvider:
                                                 attention_mask,
                                                 output_hidden_states=self.use_penultimate_clip_layer,
                                                 return_dict=True)
-
         if self.use_penultimate_clip_layer:
             # needs normalizing
             penultimate_hidden_state = text_encoder_output.hidden_states[-2]
