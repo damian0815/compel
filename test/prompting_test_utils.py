@@ -87,6 +87,7 @@ class DummyTransformer:
         tm.final_layer_norm = nn.LayerNorm(normalized_shape=[self.text_model_max_length, self.embedding_length])
         return tm
 
+
 class DummyTokenizer():
     def __init__(self, model_max_length=77):
         self.tokens = KNOWN_WORDS.copy() + ["<|bos|>", "<|pad|>", "<|eos|>"]
