@@ -30,7 +30,7 @@ class Compel:
                  downweight_mode: DownweightMode = DownweightMode.MASK,
                  use_penultimate_clip_layer: bool=False,
                  device: Optional[str] = None):
-                 return_pooled: Union[str, List[bool]] = False,
+                 requires_pooled: Union[str, List[bool]] = False,
         """
         Initialize Compel. The tokenizer and text_encoder can be lifted directly from any DiffusionPipeline.
 
@@ -64,7 +64,7 @@ class Compel:
                                                             padding_attention_mask_value = padding_attention_mask_value,
                                                             downweight_mode=downweight_mode,
                                                             use_penultimate_clip_layer=use_penultimate_clip_layer,
-                                                            return_pooled=return_pooled,
+                                                            requires_pooled=requires_pooled,
                                                             )
         else:
             self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
@@ -75,7 +75,7 @@ class Compel:
                                                             padding_attention_mask_value = padding_attention_mask_value,
                                                             downweight_mode=downweight_mode,
                                                             use_penultimate_clip_layer=use_penultimate_clip_layer,
-                                                            return_pooled=return_pooled,
+                                                            requires_pooled=requires_pooled,
                                                             )
             self._device = device
 

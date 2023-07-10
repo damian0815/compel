@@ -312,7 +312,7 @@ class EmbeddingsProvider:
                                         token_ids: torch.Tensor,
                                         per_token_weights: torch.Tensor,
                                         attention_mask: Optional[torch.Tensor] = None,
-                                        return_pooled: bool = False,
+                                        should_return_pooled: bool = False,
                                         device: Optional[str] = None) -> torch.Tensor:
         """
         :param token_ids: A tensor of shape `n*[self.max_length]` containing token IDs (ints) where n is some arbitrary
@@ -373,7 +373,7 @@ class EmbeddingsProvider:
 
             chunk_start_index += chunk_size
 
-        if self.requires_pooled:
+        if should_return_pooled:
             return weighted_z, pooled
 
         return weighted_z
@@ -473,15 +473,15 @@ class EmbeddingsProviderMulti:
                 textual_inversion_manager: BaseTextualInversionManager = None,
                 dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
                 hidden_states_types: Union[str, List[str]] = "final",
-                return_pooled: Union[str, List[bool]] = False,
+                requires_pooled: Union[str, List[bool]] = False,
                 ):
 
         hidden_states_types = len(text_encoders) * [hidden_states_types] if not isinstance(hidden_states_types, (list, tuple)) else hidden_states_types
-        return_pooled = len(text_encoders) * [return_pooled] if not isinstance(return_pooled, (list, tuple)) else return_pooled
+        requires_pooled = len(text_encoders) * [requires_pooled] if not isinstance(requires_pooled, (list, tuple)) else requires_pooled
 
         self.embedding_providers = [
             EmbeddingsProvider(tokenizer, text_encoder, textual_inversion_manager, dtype_for_device_getter, hidden_states_type, pooled)
-            for tokenizer, text_encoder, hidden_states_type, pooled in zip(tokenizers, text_encoders, hidden_states_types, return_pooled)
+            for tokenizer, text_encoder, hidden_states_type, pooled in zip(tokenizers, text_encoders, hidden_states_types, requires_pooled)
         ]
 
     @property

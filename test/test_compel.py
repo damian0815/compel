@@ -80,7 +80,7 @@ class CompelTestCase(unittest.TestCase):
         tokenizer_2 = DummyTokenizer()
         text_encoder_2 = DummyTransformer()
 
-        compel = Compel(tokenizer=[tokenizer_1, tokenizer_2], text_encoder=[text_encoder_1, text_encoder_2], hidden_states_type="penultimate", return_pooled=[False, True])
+        compel = Compel(tokenizer=[tokenizer_1, tokenizer_2], text_encoder=[text_encoder_1, text_encoder_2], hidden_states_type="penultimate", requires_pooled=[False, True])
 
         # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
         prompt = " ".join(KNOWN_WORDS[:3])
