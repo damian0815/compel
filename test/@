@@ -22,14 +22,14 @@ class EmbeddingsProvider:
                 textual_inversion_manager: BaseTextualInversionManager = None,
                 dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
                 hidden_states_type: str = "final",  # final, penultimate,
-                requires_pooled: bool = False,
+                return_pooled: bool = False,
                 ):
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
         self.textual_inversion_manager = textual_inversion_manager
 
         self.hidden_states_type = hidden_states_type
-        self.requires_pooled = requires_pooled 
+        self.return_pooled = return_pooled
 
         # by default always use float32
         self.get_dtype_for_device = dtype_for_device_getter
@@ -56,7 +56,6 @@ class EmbeddingsProvider:
                                                      text_batch: List[List[str]],
                                                      fragment_weights_batch: List[List[float]],
                                                      should_return_tokens: bool = False,
-                                                     should_return_pooled: bool = False,
                                                      device='cpu',
                                  ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """
@@ -89,8 +88,8 @@ class EmbeddingsProvider:
             tokens, per_token_weights = self.get_token_ids_and_expand_weights(fragments, weights, device=device)
             base_embedding_outputs = self.build_weighted_embedding_tensor(tokens, per_token_weights)
 
-            base_embedding = base_embedding_outputs[0] if self.requires_pooled else base_embedding_outputs
-            pooled = base_embedding_outputs[1] if self.requires_pooled else None
+            base_embedding = base_embedding_outputs[0] if self.return_pooled else base_embedding_outputs[0]
+            pooled = base_embedding_outputs[1] if self.return_pooled else None
 
             # this is our starting point
             embeddings = base_embedding.unsqueeze(0)
@@ -145,7 +144,7 @@ class EmbeddingsProvider:
         if should_return_tokens:
             outputs += (batch_tokens,)
 
-        if should_return_pooled:
+        if self.return_pooled:
             outputs += (pooled,)
 
         if len(outputs) == 1:
@@ -264,14 +263,14 @@ class EmbeddingsProvider:
         text_encoder_output = self.text_encoder(token_ids.unsqueeze(0), return_dict=False, output_hidden_states=self.hidden_states_type == "penultimate")
 
         pooled = None
-        if self.hidden_states_type == "final" and not self.requires_pooled:
+        if self.hidden_states_type == "final" and not self.return_pooled:
             z = text_encoder_output[0] if isinstance(self.text_encoder, CLIPTextModel) else text_encoder_output[1]
-        elif self.hidden_states_type == "final" and self.requires_pooled:
+        elif self.hidden_states_type == "final" and self.return_pooled:
             z = text_encoder_output[0] if isinstance(self.text_encoder, CLIPTextModel) else text_encoder_output[1]
             pooled = text_encoder_output[1] if isinstance(self.text_encoder, CLIPTextModel) else text_encoder_output[0]
-        elif self.hidden_states_type == "penultimate" and not self.requires_pooled:
+        elif self.hidden_states_type == "penultimate" and not self.return_pooled:
             z = text_encoder_output[2][-2]
-        elif self.hidden_states_type == "penultimate" and self.requires_pooled:
+        elif self.hidden_states_type == "penultimate" and self.return_pooled:
             z = text_encoder_output[2][-2]
             pooled = text_encoder_output[1] if isinstance(self.text_encoder, CLIPTextModel) else text_encoder_output[0]
 
@@ -290,7 +289,7 @@ class EmbeddingsProvider:
         z_delta_from_empty = z - empty_z
         weighted_z = empty_z + (z_delta_from_empty * batch_weights_expanded)
 
-        if self.requires_pooled:
+        if self.return_pooled:
             return weighted_z, pooled
 
         return weighted_z
@@ -332,11 +331,10 @@ class EmbeddingsProviderMulti:
                                                      text_batch: List[List[str]],
                                                      fragment_weights_batch: List[List[float]],
                                                      should_return_tokens: bool = False,
-                                                     should_return_pooled: bool = False,
                                                      device='cpu',
                                  ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
 
-        outputs = [provider.get_embeddings_for_weighted_prompt_fragments(text_batch, fragment_weights_batch, should_return_tokens=should_return_tokens, should_return_pooled=should_return_pooled, device=device) for provider in self.embedding_providers]
+        outputs = [provider.get_embeddings_for_weighted_prompt_fragments(text_batch, fragment_weights_batch, should_return_tokens, device=device) for provider in self.embedding_providers]
 
         pooled_list = []
         text_embeddings_list = []
@@ -348,20 +346,18 @@ class EmbeddingsProviderMulti:
             if should_return_tokens:
                 tokens.append(output[1])
 
-            if should_return_pooled:
+            if self.embedding_providers[i].return_pooled:
                 pooled_list.append(output[-1])
 
         text_embeddings = torch.cat(text_embeddings_list, dim=-1)
-
-        pooled_list = [p for p in pooled_list if p is not None]
         pooled = torch.cat(pooled_list, dim=-1) if len(pooled_list) > 0 else None
 
         outputs = (text_embeddings,)
 
-        if should_return_tokens:
-            outputs += (tokens,)
+        if pooled is not None:
+            outputs += (pooled)
 
-        if should_return_pooled:
-            outputs += (pooled,)
+        if should_return_tokens:
+            outputs += (tokens)
 
         return outputs

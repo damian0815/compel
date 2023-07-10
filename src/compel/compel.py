@@ -6,7 +6,7 @@ from transformers import CLIPTokenizer, CLIPTextModel
 
 from . import cross_attention_control
 from .conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
-from .embeddings_provider import EmbeddingsProvider, BaseTextualInversionManager
+from .embeddings_provider import EmbeddingsProvider, BaseTextualInversionManager, EmbeddingsProviderMulti
 from .prompt_parser import Blend, FlattenedPrompt, PromptParser, CrossAttentionControlSubstitute
 
 __all__ = ["Compel"]
@@ -18,15 +18,34 @@ class ExtraConditioningInfo:
 class Compel:
 
     def __init__(self,
-                 tokenizer: CLIPTokenizer,
-                 text_encoder: CLIPTextModel,
+                 tokenizer: Union[CLIPTokenizer, List[CLIPTokenizer]],
+                 text_encoder: Union[CLIPTextModel, List[CLIPTextModel]],
                  textual_inversion_manager: Optional[BaseTextualInversionManager] = None,
-                 dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32):
-        self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
-                                                        text_encoder=text_encoder,
-                                                        textual_inversion_manager=textual_inversion_manager,
-                                                        dtype_for_device_getter=dtype_for_device_getter
-                                                        )
+                 dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
+                 hidden_states_type: Union[str, List[str]] = "final",
+                 return_pooled: Union[str, List[bool]] = False,
+        ):
+
+        if isinstance(tokenizer, (tuple, list)) and isinstance(text_encoder, (tuple, list)):
+            self.conditioning_provider = EmbeddingsProviderMulti(tokenizers=tokenizer,
+                                                            text_encoders=text_encoder,
+                                                            textual_inversion_manager=textual_inversion_manager,
+                                                            dtype_for_device_getter=dtype_for_device_getter,
+                                                            hidden_states_types=hidden_states_type,
+                                                            return_pooled=return_pooled,
+                                                            )
+        elif isinstance(tokenizer, (tuple, list)) and not isinstance(text_encoder, (tuple, list)):
+            raise ValueError("Cannot provide list of tokenizers, but not of text encoders.")
+        elif not isinstance(tokenizer, (tuple, list)) and isinstance(text_encoder, (tuple, list)):
+            raise ValueError("Cannot provide list of text encoders, but not of tokenizers.")
+        else:
+            self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
+                                                            text_encoder=text_encoder,
+                                                            textual_inversion_manager=textual_inversion_manager,
+                                                            dtype_for_device_getter=dtype_for_device_getter,
+                                                            hidden_states_type=hidden_states_type,
+                                                            return_pooled=return_pooled,
+                                                            )
 
     @property
     def device(self):
@@ -91,18 +110,27 @@ class Compel:
 
         raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
 
-    def _get_conditioning_for_flattened_prompt(self, prompt: FlattenedPrompt, should_return_tokens: bool=False
+    def _get_conditioning_for_flattened_prompt(self, prompt: FlattenedPrompt, should_return_tokens: bool=False, should_return_pooled: bool=False,
                                                ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         if type(prompt) is not FlattenedPrompt:
             raise ValueError(f"embeddings can only be made from FlattenedPrompts, got {type(prompt).__name__} instead")
         fragments = [x.text for x in prompt.children]
         weights = [x.weight for x in prompt.children]
-        conditioning, tokens = self.conditioning_provider.get_embeddings_for_weighted_prompt_fragments(
-            text_batch=[fragments], fragment_weights_batch=[weights], should_return_tokens=True, device=self.device)
+        conditioning, tokens, pooled = self.conditioning_provider.get_embeddings_for_weighted_prompt_fragments(
+            text_batch=[fragments], fragment_weights_batch=[weights], should_return_tokens=True, should_return_pooled=True, device=self.device)
+
+        outputs = (conditioning,)
+
+        if should_return_pooled:
+            outputs += (pooled,)
+
         if should_return_tokens:
-            return conditioning, tokens
-        else:
-            return conditioning
+            outputs += (tokens,)
+
+        if len(outputs) == 1:
+            return outputs[0]
+
+        return outputs
 
     def _get_conditioning_for_blend(self, blend: Blend):
         conditionings_to_blend = None

@@ -41,7 +41,7 @@ class DummyTransformer:
     def get_input_embeddings(self):
         return self.embeddings
 
-    def forward(self, input_ids: torch.Tensor, return_dict: bool=True):
+    def forward(self, input_ids: torch.Tensor, return_dict: bool=True, output_hidden_states: bool=False):
         if input_ids.shape[0] > 1:
             raise AssertionError("for unit testing, only batch size =1 is supported")
         all_embeddings = torch.cat([e.unsqueeze(0) for e in self.embeddings]).to(self.device)
@@ -55,14 +55,18 @@ class DummyTransformer:
                 self.last_hidden_state = last_hidden_state
 
             def __getitem__(self, item):
-                assert item == 0
-                return self.last_hidden_state
+                if item == 0:
+                    return self.last_hidden_state[:, -1, :]
+                if item == 1:
+                    return self.last_hidden_state
+                if item == 2:
+                    return 2 * [self.last_hidden_state]
 
         o = EmbeddingsObject(embeddings)
         return o
 
     def __call__(self, input_ids, **kwargs):
-        return self.forward(input_ids=input_ids, return_dict=True)
+        return self.forward(input_ids=input_ids, return_dict=True, output_hidden_states=kwargs.pop("output_hidden_states", False))
 
 class DummyTokenizer():
     def __init__(self, model_max_length=77):
