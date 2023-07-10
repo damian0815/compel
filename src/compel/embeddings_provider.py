@@ -223,10 +223,7 @@ class EmbeddingsProvider:
 
         return result
 
-    def maybe_get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
-        if not self.requires_pooled:
-            return None
-
+    def get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
         token_ids = self.get_token_ids(texts, padding="max_length")
         text_encoder_output = self.text_encoder(token_ids, attention_mask, return_dict=True)
 
@@ -486,8 +483,8 @@ class EmbeddingsProviderMulti:
         # so for simplicity, we just return `get_token_ids` of the first tokenizer
         return self.embedding_providers[0].get_token_ids(self, *args, **kwargs)
 
-    def maybe_get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
-        pooled = [provider.maybe_get_pooled(texts, attention_mask) for provider in self.embedding_providers]
+    def get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
+        pooled = [provider.get_pooled(texts, attention_mask) if isinstance(provider, CLIPTextModelWithProjection) else None for provider in self.embedding_providers]
         pooled = [p for p in pooled if p is not None]
 
         if len(pooled) == 0:

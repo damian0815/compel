@@ -3,7 +3,7 @@ from typing import Union, Optional, Callable, List, Tuple
 
 import torch
 from torch import Tensor
-from transformers import CLIPTokenizer, CLIPTextModel
+from transformers import CLIPTokenizer, CLIPTextModel, ConditionalDetrImageProcessor
 
 from . import cross_attention_control
 from .conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
@@ -84,7 +84,7 @@ class Compel:
     def device(self):
         return self._device if self._device else self.conditioning_provider.text_encoder.device
 
-    def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str='') -> ConditioningScheduler:
+    def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str=''):
         """
         Return a ConditioningScheduler object that provides conditioning tensors for different diffusion steps (currently
         not fully implemented).
@@ -97,17 +97,22 @@ class Compel:
         return StaticConditioningScheduler(positive_conditioning=positive_conditioning,
                                            negative_conditioning=negative_conditioning)
 
-    def build_conditioning_tensor(self, text: str) -> torch.Tensor:
+    def build_conditioning_tensor(self, text: str, return_pooled: bool = False) -> torch.Tensor:
         """
         Build a conditioning tensor by parsing the text for Compel syntax, constructing a Conjunction, and then
         building a conditioning tensor from that Conjunction.
         """
         conjunction = self.parse_prompt_string(text)
         conditioning, _ = self.build_conditioning_tensor_for_conjunction(conjunction)
+
+        if return_pooled:
+            pooled = self.conditioning_provider.get_pooled(text)
+            return conditioning, pooled
+
         return conditioning
 
     @torch.no_grad()
-    def __call__(self, text: Union[str, List[str]]) -> torch.FloatTensor:
+    def __call__(self, text: Union[str, List[str]], return_pooled: False) -> torch.FloatTensor:
         """
         Take a string or a list of strings and build conditioning tensors to match.
 
@@ -119,11 +124,19 @@ class Compel:
             text = [text]
 
         cond_tensor = []
+        pooled = []
         for text_input in text:
-            cond_tensor.append(self.build_conditioning_tensor(text_input))
+            output = self.build_conditioning_tensor(text_input, return_pooled=return_pooled)
+            cond_tensor.append(output[0] if return_pooled else output)
+
+            if return_pooled:
+                pooled.append(output[1])
 
         cond_tensor = self.pad_conditioning_tensors_to_same_length(conditionings=cond_tensor)
         cond_tensor = torch.cat(cond_tensor)
+
+        if return_pooled:
+            cond_tensor, torch.cat(pooled)
 
         return cond_tensor
 
