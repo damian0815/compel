@@ -321,6 +321,8 @@ class EmbeddingsProvider:
                                         attention_mask: Optional[torch.Tensor] = None,
                                         device: Optional[str] = None) -> torch.Tensor:
         """
+        Build a tensor that embeds the passed-in token IDs and applies the given per_token weights
+        
         :param token_ids: A tensor of shape `n*[self.max_length]` containing token IDs (ints) where n is some arbitrary
             integer (i.e. n==1 for shorter prompts, or it may be >1 if there are more than max_length tokens in the
             original prompt)
