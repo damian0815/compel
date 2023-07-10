@@ -189,6 +189,8 @@ class Compel:
 
         raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
 
+
+
     def pad_conditioning_tensors_to_same_length(self, conditionings: List[torch.Tensor],
                                                 ) -> List[torch.Tensor]:
         """
@@ -230,7 +232,7 @@ class Compel:
 
     def _get_conditioning_for_flattened_prompt(self,
                                                prompt: FlattenedPrompt,
-                                               should_return_tokens: bool=False,
+                                               should_return_tokens: bool=False
                                                ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         if type(prompt) is not FlattenedPrompt:
             raise ValueError(f"embeddings can only be made from FlattenedPrompts, got {type(prompt).__name__} instead")
@@ -239,16 +241,10 @@ class Compel:
         conditioning, tokens = self.conditioning_provider.get_embeddings_for_weighted_prompt_fragments(
             text_batch=[fragments], fragment_weights_batch=[weights],
             should_return_tokens=True, device=self.device)
-
-        outputs = (conditioning,)
-
         if should_return_tokens:
-            outputs += (tokens,)
-
-        if len(outputs) == 1:
-            return outputs[0]
-
-        return outputs
+            return conditioning, tokens
+        else:
+            return conditioning
 
     def _get_conditioning_for_blend(self, blend: Blend):
         conditionings_to_blend = []
