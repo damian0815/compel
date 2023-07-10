@@ -114,7 +114,7 @@ class EmbeddingsProvider:
 
             # handle weights >=1
             tokens, per_token_weights, mask = self.get_token_ids_and_expand_weights(fragments, weights, device=device)
-            base_embedding = self.build_weighted_embedding_tensor(tokens, per_token_weights, mask)[0]
+            base_embedding = self.build_weighted_embedding_tensor(tokens, per_token_weights, mask, device=device)
 
             # this is our starting point
             embeddings = base_embedding.unsqueeze(0)
@@ -183,15 +183,11 @@ class EmbeddingsProvider:
 
         # should have shape (B, 77, 768)
         #print(f"assembled all tokens into tensor of shape {batch_z.shape}")
-        outputs = (batch_z,)
 
         if should_return_tokens:
-            outputs += (batch_tokens,)
-
-        if len(outputs) == 1:
-            return outputs[0]
-
-        return outputs
+            return batch_z, batch_tokens
+        else:
+            return batch_z
 
     def get_token_ids(self, texts: List[str], include_start_and_end_markers: bool = True) -> List[List[int]]:
         """
@@ -315,6 +311,8 @@ class EmbeddingsProvider:
                                         return_pooled: bool = False,
                                         device: Optional[str] = None) -> torch.Tensor:
         """
+        Build a tensor that embeds the passed-in token IDs and applies the given per_token weights
+        
         :param token_ids: A tensor of shape `n*[self.max_length]` containing token IDs (ints) where n is some arbitrary
             integer (i.e. n==1 for shorter prompts, or it may be >1 if there are more than max_length tokens in the
             original prompt)
