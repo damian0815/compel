@@ -30,7 +30,6 @@ class Compel:
                  downweight_mode: DownweightMode = DownweightMode.MASK,
                  use_penultimate_clip_layer: Union[bool, List[bool]]=False,
                  use_penultimate_layer_norm: Union[bool, List[bool]]=False,
-                 requires_pooled: Union[str, List[bool]] = False,
                  device: Optional[str] = None
                  ):
         """
@@ -67,7 +66,6 @@ class Compel:
                                                             downweight_mode=downweight_mode,
                                                             use_penultimate_clip_layer=use_penultimate_clip_layer,
                                                             use_penultimate_layer_norm=use_penultimate_layer_norm,
-                                                            requires_pooled=requires_pooled,
                                                             )
         else:
             self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
@@ -79,7 +77,6 @@ class Compel:
                                                             downweight_mode=downweight_mode,
                                                             use_penultimate_clip_layer=use_penultimate_clip_layer,
                                                             use_penultimate_layer_norm=use_penultimate_layer_norm,
-                                                            requires_pooled=requires_pooled,
                                                             )
             self._device = device
 
@@ -106,7 +103,6 @@ class Compel:
         building a conditioning tensor from that Conjunction.
         """
         conjunction = self.parse_prompt_string(text)
-        import ipdb; ipdb.set_trace()
         conditioning, _ = self.build_conditioning_tensor_for_conjunction(conjunction)
         return conditioning
 
@@ -235,23 +231,19 @@ class Compel:
     def _get_conditioning_for_flattened_prompt(self,
                                                prompt: FlattenedPrompt,
                                                should_return_tokens: bool=False,
-                                               should_return_pooled: bool=False
                                                ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         if type(prompt) is not FlattenedPrompt:
             raise ValueError(f"embeddings can only be made from FlattenedPrompts, got {type(prompt).__name__} instead")
         fragments = [x.text for x in prompt.children]
         weights = [x.weight for x in prompt.children]
-        conditioning, tokens, pooled = self.conditioning_provider.get_embeddings_for_weighted_prompt_fragments(
+        conditioning, tokens = self.conditioning_provider.get_embeddings_for_weighted_prompt_fragments(
             text_batch=[fragments], fragment_weights_batch=[weights],
-            should_return_tokens=True, should_return_pooled=True, device=self.device)
+            should_return_tokens=True, device=self.device)
 
         outputs = (conditioning,)
 
         if should_return_tokens:
             outputs += (tokens,)
-
-        if should_return_pooled:
-            outputs += (pooled,)
 
         if len(outputs) == 1:
             return outputs[0]

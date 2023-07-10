@@ -31,7 +31,6 @@ class EmbeddingsProvider:
                  downweight_mode: DownweightMode = DownweightMode.MASK,
                  use_penultimate_clip_layer: bool=False,
                  use_penultimate_layer_norm: bool=True,
-                 requires_pooled: bool = False,
                  ):
         """
         `tokenizer`: converts strings to lists of int token ids
@@ -54,8 +53,6 @@ class EmbeddingsProvider:
         self.downweight_mode = downweight_mode
         self.use_penultimate_clip_layer = use_penultimate_clip_layer
         self.use_penultimate_layer_norm = use_penultimate_layer_norm 
-
-        self.requires_pooled = requires_pooled 
 
         # by default always use float32
         self.get_dtype_for_device = dtype_for_device_getter
@@ -462,20 +459,23 @@ class EmbeddingsProvider:
 class EmbeddingsProviderMulti:
 
     def __init__(self,
-                tokenizers: List[CLIPTokenizer], # converts strings to lists of int token ids
-                text_encoders: List[Union[CLIPTextModel, CLIPTextModelWithProjection]], # convert a list of int token ids to a tensor of embeddings
+                tokenizers: CLIPTokenizer,
+                text_encoders: Union[CLIPTextModel, CLIPTextModelWithProjection], # convert a list of int token ids to a tensor of embeddings
                 textual_inversion_manager: BaseTextualInversionManager = None,
                 dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
-                hidden_states_types: Union[str, List[str]] = "final",
-                requires_pooled: Union[str, List[bool]] = False,
+                truncate: bool = True,
+                padding_attention_mask_value: int = 1,
+                downweight_mode: DownweightMode = DownweightMode.MASK,
+                use_penultimate_clip_layer: List[bool]=False,
+                use_penultimate_layer_norm: List[bool]=True,
                 ):
 
-        hidden_states_types = len(text_encoders) * [hidden_states_types] if not isinstance(hidden_states_types, (list, tuple)) else hidden_states_types
-        requires_pooled = len(text_encoders) * [requires_pooled] if not isinstance(requires_pooled, (list, tuple)) else requires_pooled
+        use_penultimate_clip_layer = len(text_encoders) * [use_penultimate_clip_layer] if not isinstance(use_penultimate_clip_layer, (list, tuple)) else use_penultimate_clip_layer
+        use_penultimate_layer_norm = len(text_encoders) * [use_penultimate_layer_norm] if not isinstance(use_penultimate_layer_norm, (list, tuple)) else use_penultimate_layer_norm
 
         self.embedding_providers = [
-            EmbeddingsProvider(tokenizer, text_encoder, textual_inversion_manager, dtype_for_device_getter, hidden_states_type, pooled)
-            for tokenizer, text_encoder, hidden_states_type, pooled in zip(tokenizers, text_encoders, hidden_states_types, requires_pooled)
+            EmbeddingsProvider(tokenizer, text_encoder, textual_inversion_manager, dtype_for_device_getter, truncate, padding_attention_mask_value, downweight_mode, clip_layer, clip_norm)
+            for tokenizer, text_encoder, clip_layer, clip_norm in zip(tokenizers, text_encoders, use_penultimate_clip_layer, use_penultimate_layer_norm)
         ]
 
     @property
