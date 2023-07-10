@@ -3,7 +3,7 @@ from typing import Union, Optional, Callable, List, Tuple
 
 import torch
 from torch import Tensor
-from transformers import CLIPTokenizer, CLIPTextModel, ConditionalDetrImageProcessor
+from transformers import CLIPTokenizer, CLIPTextModel
 
 from . import cross_attention_control
 from .conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
@@ -88,7 +88,7 @@ class Compel:
     def device(self):
         return self._device if self._device else self.conditioning_provider.text_encoder.device
 
-    def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str=''):
+    def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str='')  -> ConditioningScheduler:
         """
         Return a ConditioningScheduler object that provides conditioning tensors for different diffusion steps (currently
         not fully implemented).
