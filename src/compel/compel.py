@@ -7,7 +7,7 @@ from transformers import CLIPTokenizer, CLIPTextModel
 
 from . import cross_attention_control
 from .conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
-from .embeddings_provider import EmbeddingsProvider, BaseTextualInversionManager, DownweightMode, EmbeddingsProviderMulti
+from .embeddings_provider import EmbeddingsProvider, BaseTextualInversionManager, DownweightMode, ReturnedEmbeddingsType, EmbeddingsProviderMulti
 from .prompt_parser import Blend, FlattenedPrompt, PromptParser, CrossAttentionControlSubstitute, Conjunction
 
 __all__ = ["Compel", "DownweightMode"]
@@ -28,9 +28,8 @@ class Compel:
                  truncate_long_prompts: bool = True,
                  padding_attention_mask_value: int = 1,
                  downweight_mode: DownweightMode = DownweightMode.MASK,
-                 use_penultimate_clip_layer: Union[bool, List[bool]]=False,
-                 use_penultimate_layer_norm: Union[bool, List[bool]]=False,
-                 requires_pooled: Union[bool, List[bool]]=False,
+                 returned_embeddings_type: ReturnedEmbeddingsType = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED,
+                 requires_pooled: bool = False,
                  device: Optional[str] = None
                  ):
         """
@@ -48,8 +47,8 @@ class Compel:
         `padding_attention_mask_value`: Value to write into the attention mask for padding tokens. Stable Diffusion needs 1.
         `downweight_mode`: Specifies whether downweighting should be applied by MASKing out the downweighted tokens
             (default) or REMOVEing them (legacy behaviour; messes up position embeddings of tokens following).
-        `use_penultimate_clip_layer`: If True, use the penultimate hidden layer output of the CLIP text encoder's output,
-            rather than the final hidden layer output.
+        `returned_embeddings_type`: controls how the embedding vectors are taken from the result of running the text encoder over the parsed prompt's text
+        `requires_pooled`: for SDXL, append the pooled embeddings when returning conditioning tensors
         `device`: The torch device on which the tensors should be created. If a device is not specified, the device will
             be the same as that of the `text_encoder` at the moment when `build_conditioning_tensor()` is called.
         """
@@ -65,10 +64,9 @@ class Compel:
                                                             truncate=truncate_long_prompts,
                                                             padding_attention_mask_value = padding_attention_mask_value,
                                                             downweight_mode=downweight_mode,
-                                                            use_penultimate_clip_layer=use_penultimate_clip_layer,
-                                                            use_penultimate_layer_norm=use_penultimate_layer_norm,
-                                                            requires_pooled=requires_pooled,
-                                                            )
+                                                            returned_embeddings_type=returned_embeddings_type,
+                                                            requires_pooled_mask = requires_pooled
+            )
         else:
             self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
                                                             text_encoder=text_encoder,
@@ -77,12 +75,10 @@ class Compel:
                                                             truncate=truncate_long_prompts,
                                                             padding_attention_mask_value = padding_attention_mask_value,
                                                             downweight_mode=downweight_mode,
-                                                            use_penultimate_clip_layer=use_penultimate_clip_layer,
-                                                            use_penultimate_layer_norm=use_penultimate_layer_norm,
-                                                            requires_pooled=requires_pooled,
+                                                            returned_embeddings_type=returned_embeddings_type,
                                                             )
-
         self._device = device
+        self.requires_pooled = requires_pooled
 
     @property
     def device(self):
@@ -101,7 +97,7 @@ class Compel:
         return StaticConditioningScheduler(positive_conditioning=positive_conditioning,
                                            negative_conditioning=negative_conditioning)
 
-    def build_conditioning_tensor(self, text: str, return_pooled: bool = False) -> torch.Tensor:
+    def build_conditioning_tensor(self, text: str) -> torch.Tensor:
         """
         Build a conditioning tensor by parsing the text for Compel syntax, constructing a Conjunction, and then
         building a conditioning tensor from that Conjunction.
@@ -109,12 +105,11 @@ class Compel:
         conjunction = self.parse_prompt_string(text)
         conditioning, _ = self.build_conditioning_tensor_for_conjunction(conjunction)
 
-        pooled = self.conditioning_provider.maybe_get_pooled([text])
-
-        if return_pooled and pooled is not None:
+        if self.requires_pooled:
+            pooled = self.conditioning_provider.get_pooled_embeddings([text])
             return conditioning, pooled
-
-        return conditioning
+        else:
+            return conditioning
 
     @torch.no_grad()
     def __call__(self, text: Union[str, List[str]]) -> torch.FloatTensor:
@@ -131,21 +126,22 @@ class Compel:
         cond_tensor = []
         pooled = []
         for text_input in text:
-            output = self.build_conditioning_tensor(text_input, return_pooled=True)
+            output = self.build_conditioning_tensor(text_input)
 
-            requires_pooled = len(output) > 1
-            cond_tensor.append(output[0] if requires_pooled else output)
-
-            if requires_pooled:
+            if self.requires_pooled:
+                cond_tensor.append(output[0])
                 pooled.append(output[1])
+            else:
+                cond_tensor.append(output)
 
         cond_tensor = self.pad_conditioning_tensors_to_same_length(conditionings=cond_tensor)
         cond_tensor = torch.cat(cond_tensor)
 
-        if len(pooled) > 0:
-            return cond_tensor, torch.cat(pooled)
-
-        return cond_tensor
+        if self.requires_pooled:
+            pooled = torch.cat(pooled)
+            return cond_tensor, pooled
+        else:
+            return cond_tensor
 
     @classmethod
     def parse_prompt_string(cls, prompt_string: str) -> Conjunction:
@@ -209,6 +205,31 @@ class Compel:
 
         raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
 
+    @classmethod
+    def _pad_conditioning_tensors_to_same_length(cls, conditionings: List[torch.Tensor], emptystring_conditioning: torch.Tensor
+                                                 ) -> List[torch.Tensor]:
+        c0_shape = conditionings[0].shape
+        if not all([len(c.shape) == len(c0_shape) for c in conditionings]):
+            raise ValueError("Conditioning tensors must all have either 2 dimensions (unbatched) or 3 dimensions (batched)")
+
+        if len(c0_shape) == 2:
+            # need to be unsqueezed
+            conditionings = [c.unsqueeze(0) for c in conditionings]
+            c0_shape = conditionings[0].shape
+        if len(c0_shape) != 3:
+            raise ValueError(f"All conditioning tensors must have the same number of dimensions (2 or 3)")
+
+        if not all([c.shape[0] == c0_shape[0] and c.shape[2] == c0_shape[2] for c in conditionings]):
+            raise ValueError(f"All conditioning tensors must have the same batch size ({c0_shape[0]}) and number of embeddings per token ({c0_shape[1]}")
+
+        empty_z = torch.cat([emptystring_conditioning] * c0_shape[0])
+        max_token_count = max([c.shape[1] for c in conditionings])
+        # if necessary, pad shorter tensors out with an emptystring tensor
+        for i, c in enumerate(conditionings):
+            while c.shape[1] < max_token_count:
+                c = torch.cat([c, empty_z], dim=1)
+                conditionings[i] = c
+        return conditionings
 
 
     def pad_conditioning_tensors_to_same_length(self, conditionings: List[torch.Tensor],
@@ -226,28 +247,12 @@ class Compel:
             [embeds, negative_embeds] = compel.pad_conditioning_tensors_to_same_length([embeds, negative_embeds])
             ```
         """
-        c0_shape = conditionings[0].shape
-        if not all([len(c.shape) == len(c0_shape) for c in conditionings]):
-            raise ValueError("Conditioning tensors must all have either 2 dimensions (unbatched) or 3 dimensions (batched)")
+        emptystring_conditioning = self.build_conditioning_tensor("")
+        if type(emptystring_conditioning) is tuple:
+            # discard pooled
+            emptystring_conditioning = emptystring_conditioning[0]
+        return type(self)._pad_conditioning_tensors_to_same_length(conditionings, emptystring_conditioning=emptystring_conditioning)
 
-        if len(c0_shape) == 2:
-            # need to be unsqueezed
-            conditionings = [c.unsqueeze(0) for c in conditionings]
-            c0_shape = conditionings[0].shape
-        if len(c0_shape) != 3:
-            raise ValueError(f"All conditioning tensors must have the same number of dimensions (2 or 3)")
-
-        if not all([c.shape[0] == c0_shape[0] and c.shape[2] == c0_shape[2] for c in conditionings]):
-            raise ValueError(f"All conditioning tensors must have the same batch size ({c0_shape[0]}) and number of embeddings per token ({c0_shape[1]}")
-
-        max_token_count = max([c.shape[1] for c in conditionings])
-        # if necessary, pad shorter tensors out with an emptystring tensor
-        empty_z = torch.cat([self.build_conditioning_tensor("")] * c0_shape[0])
-        for i, c in enumerate(conditionings):
-            while c.shape[1] < max_token_count:
-                c = torch.cat([c, empty_z], dim=1)
-            conditionings[i] = c
-        return conditionings
 
 
     def _get_conditioning_for_flattened_prompt(self,
@@ -258,13 +263,10 @@ class Compel:
             raise ValueError(f"embeddings can only be made from FlattenedPrompts, got {type(prompt).__name__} instead")
         fragments = [x.text for x in prompt.children]
         weights = [x.weight for x in prompt.children]
-        conditioning, tokens = self.conditioning_provider.get_embeddings_for_weighted_prompt_fragments(
+        return self.conditioning_provider.get_embeddings_for_weighted_prompt_fragments(
             text_batch=[fragments], fragment_weights_batch=[weights],
-            should_return_tokens=True, device=self.device)
-        if should_return_tokens:
-            return conditioning, tokens
-        else:
-            return conditioning
+            should_return_tokens=should_return_tokens, device=self.device)
+
 
     def _get_conditioning_for_blend(self, blend: Blend):
         conditionings_to_blend = []

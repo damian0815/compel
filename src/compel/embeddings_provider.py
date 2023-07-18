@@ -1,22 +1,27 @@
 import math
 from abc import ABC
 from enum import Enum
-from typing import Callable, Union, Tuple, List, Optional
+from typing import Callable, Union, Optional
 
 import torch
 from transformers import CLIPTokenizer, CLIPTextModel, CLIPTextModelWithProjection
 from typing import List, Tuple
 
-__all__ = ["EmbeddingsProvider", "DownweightMode"]
+__all__ = ["EmbeddingsProvider", "DownweightMode", "ReturnedEmbeddingsType"]
 
 
 class DownweightMode(Enum):
     REMOVE = 0  # Remove downweighted tokens from the token sequence (shifts all subsequent tokens)
-    MASK = 1,   # Default: Leave tokens in-place but mask them out using attention masking
+    MASK = 1   # Default: Leave tokens in-place but mask them out using attention masking
 
 class BaseTextualInversionManager(ABC):
     def expand_textual_inversion_token_ids_if_necessary(self, token_ids: List[int]) -> List[int]:
         raise NotImplementedError()
+
+class ReturnedEmbeddingsType(Enum):
+    LAST_HIDDEN_STATES_NORMALIZED = 0             # SD1/2 regular
+    PENULTIMATE_HIDDEN_STATES_NORMALIZED = 1      # SD1.5 with "clip skip"
+    PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED = 2  # SDXL
 
 
 class EmbeddingsProvider:
@@ -29,9 +34,7 @@ class EmbeddingsProvider:
                  truncate: bool = True,
                  padding_attention_mask_value: int = 1,
                  downweight_mode: DownweightMode = DownweightMode.MASK,
-                 use_penultimate_clip_layer: bool=False,
-                 use_penultimate_layer_norm: bool=True,
-                 requires_pooled: bool=False,
+                 returned_embeddings_type: ReturnedEmbeddingsType = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED
                  ):
         """
         `tokenizer`: converts strings to lists of int token ids
@@ -45,6 +48,7 @@ class EmbeddingsProvider:
                     if REMOVE, the blend is against a version of the prompt with the downweighted tokens removed
         `use_penultimate_clip_layer`: Whether to tuse the penultimate hidden state output of the CLIP emcoder (True) or
                     the final hidden state output (False, default).
+        `requires_pooled`:
         """
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
@@ -52,9 +56,7 @@ class EmbeddingsProvider:
         self.truncate_to_model_max_length = truncate
         self.padding_attention_mask_value = padding_attention_mask_value
         self.downweight_mode = downweight_mode
-        self.use_penultimate_clip_layer = use_penultimate_clip_layer
-        self.use_penultimate_layer_norm = use_penultimate_layer_norm 
-        self.requires_pooled = requires_pooled
+        self.returned_embeddings_type = returned_embeddings_type
 
         # by default always use float32
         self.get_dtype_for_device = dtype_for_device_getter
@@ -225,10 +227,7 @@ class EmbeddingsProvider:
 
         return result
 
-    def maybe_get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
-        if not self.requires_pooled:
-            return None
-        
+    def get_pooled_embeddings(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
         token_ids = self.get_token_ids(texts, padding="max_length")
         token_ids = torch.tensor(token_ids, dtype=torch.long).to(self.text_encoder.device)
 
@@ -236,6 +235,7 @@ class EmbeddingsProvider:
         pooled = text_encoder_output.text_embeds
 
         return pooled
+
 
     def get_token_ids_and_expand_weights(self, fragments: List[str], weights: List[float], device: str
                                          ) -> (torch.Tensor, torch.Tensor, torch.Tensor):
@@ -376,20 +376,23 @@ class EmbeddingsProvider:
 
     def _encode_token_ids_to_embeddings(self, token_ids: torch.Tensor,
                                         attention_mask: Optional[torch.Tensor]=None) -> torch.Tensor:
+        needs_hidden_states = (self.returned_embeddings_type == ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NORMALIZED or
+                               self.returned_embeddings_type == ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED)
         text_encoder_output = self.text_encoder(token_ids,
                                                 attention_mask,
-                                                output_hidden_states=self.use_penultimate_clip_layer,
+                                                output_hidden_states=needs_hidden_states,
                                                 return_dict=True)
-        if self.use_penultimate_clip_layer:
-            # needs normalizing
+        if self.returned_embeddings_type is ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED:
             penultimate_hidden_state = text_encoder_output.hidden_states[-2]
-
-            if self.use_penultimate_layer_norm:
-                penultimate_hidden_state = self.text_encoder.text_model.final_layer_norm(penultimate_hidden_state)
             return penultimate_hidden_state
-        else:
+        elif self.returned_embeddings_type is ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NORMALIZED:
+            penultimate_hidden_state = text_encoder_output.hidden_states[-2]
+            return self.text_encoder.text_model.final_layer_norm(penultimate_hidden_state)
+        elif self.returned_embeddings_type is ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED:
             # already normalized
             return text_encoder_output.last_hidden_state
+
+        assert False, f"unrecognized ReturnEmbeddingsType: {self.returned_embeddings_type}"
 
     def _get_token_ranges_for_fragments(self, chunked_and_padded_token_ids: List[int], fragments: List[str]) -> List[Tuple[int, int]]:
         """
@@ -465,19 +468,17 @@ class EmbeddingsProviderMulti:
                 truncate: bool = True,
                 padding_attention_mask_value: int = 1,
                 downweight_mode: DownweightMode = DownweightMode.MASK,
-                use_penultimate_clip_layer: Union[List[bool], bool]=False,
-                use_penultimate_layer_norm: Union[List[bool], bool]=True,
-                requires_pooled: Union[List[bool], bool]=False,
+                returned_embeddings_type: Union[List[ReturnedEmbeddingsType], ReturnedEmbeddingsType] = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED,
+                 requires_pooled_mask: List[bool] = []
                 ):
 
-        use_penultimate_clip_layer = len(text_encoders) * [use_penultimate_clip_layer] if not isinstance(use_penultimate_clip_layer, (list, tuple)) else use_penultimate_clip_layer
-        use_penultimate_layer_norm = len(text_encoders) * [use_penultimate_layer_norm] if not isinstance(use_penultimate_layer_norm, (list, tuple)) else use_penultimate_layer_norm
-        requires_pooled = len(text_encoders) * [requires_pooled] if not isinstance(requires_pooled, (list, tuple)) else requires_pooled
+        returned_embeddings_type = len(text_encoders) * [returned_embeddings_type] if not isinstance(returned_embeddings_type, (list,tuple)) else returned_embeddings_type
 
         self.embedding_providers = [
-            EmbeddingsProvider(tokenizer, text_encoder, textual_inversion_manager, dtype_for_device_getter, truncate, padding_attention_mask_value, downweight_mode, clip_layer, clip_norm, pooled)
-            for tokenizer, text_encoder, clip_layer, clip_norm, pooled in zip(tokenizers, text_encoders, use_penultimate_clip_layer, use_penultimate_layer_norm, requires_pooled)
+            EmbeddingsProvider(tokenizer, text_encoder, textual_inversion_manager, dtype_for_device_getter, truncate, padding_attention_mask_value, downweight_mode, returned_embeddings_type)
+            for tokenizer, text_encoder, returned_embeddings_type in zip(tokenizers, text_encoders, returned_embeddings_type)
         ]
+        self.requires_pooled_mask = requires_pooled_mask
 
     @property
     def text_encoder(self):
@@ -492,9 +493,9 @@ class EmbeddingsProviderMulti:
         # so for simplicity, we just return `get_token_ids` of the first tokenizer
         return self.embedding_providers[0].get_token_ids(self, *args, **kwargs)
 
-    def maybe_get_pooled(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
-        pooled = [provider.maybe_get_pooled(texts, attention_mask) for provider in self.embedding_providers]
-        pooled = [p for p in pooled if p is not None]
+    def get_pooled_embeddings(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
+        pooled = [self.embedding_providers[provider_index].get_pooled_embeddings(texts, attention_mask)
+                  for provider_index, requires_pooled in enumerate(self.requires_pooled_mask) if requires_pooled]
 
         if len(pooled) == 0:
             return None
@@ -521,9 +522,7 @@ class EmbeddingsProviderMulti:
 
         text_embeddings = torch.cat(text_embeddings_list, dim=-1)
 
-        outputs = (text_embeddings,)
-
         if should_return_tokens:
-            outputs += (tokens,)
-
-        return outputs
+            return text_embeddings, tokens
+        else:
+            return text_embeddings

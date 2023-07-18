@@ -3,7 +3,7 @@ from typing import List, Optional
 
 import torch
 
-from src.compel import EmbeddingsProvider
+from src.compel import EmbeddingsProvider, ReturnedEmbeddingsType
 from src.compel.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
 from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS, NullTransformer
 
@@ -80,9 +80,10 @@ class CompelTestCase(unittest.TestCase):
         tokenizer_2 = DummyTokenizer()
         text_encoder_2 = DummyTransformer()
 
-        compel = Compel(tokenizer=[tokenizer_1, tokenizer_2], text_encoder=[text_encoder_1, text_encoder_2], use_penultimate_clip_layer=True, use_penultimate_layer_norm=False, requires_pooled=[False, True])
+        compel = Compel(tokenizer=[tokenizer_1, tokenizer_2], text_encoder=[text_encoder_1, text_encoder_2],
+                        returned_embeddings_type = ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
+                        requires_pooled=[False, True])
 
-        # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
         prompt = " ".join(KNOWN_WORDS[:3])
         output, pooled = compel(prompt)
 
@@ -109,7 +110,8 @@ class CompelTestCase(unittest.TestCase):
     def test_use_penultimate_layer(self):
         tokenizer = DummyTokenizer()
         text_encoder = DummyTransformer()
-        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, use_penultimate_clip_layer=True)
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder,
+                        returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NORMALIZED)
 
         # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
         prompt = " ".join(KNOWN_WORDS[:3])
