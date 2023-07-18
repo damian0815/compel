@@ -47,7 +47,7 @@ class DummyTransformer:
     def get_input_embeddings(self):
         return self.embeddings
 
-    def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor], return_dict: bool=True):
+    def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor], output_hidden_states: bool=False, return_dict: bool=True):
         if input_ids.shape[0] > 1:
             raise AssertionError("for unit testing, only batch size =1 is supported")
         all_embeddings = torch.cat([e.unsqueeze(0) for e in self.embeddings]).to(self.device)
@@ -71,11 +71,15 @@ class DummyTransformer:
             def hidden_states(self):
                 return [-self.last_hidden_state, self.last_hidden_state]
 
+            @property
+            def text_embeds(self):
+                return self.last_hidden_state[:, -1, :]
+
         o = EmbeddingsObject(embeddings)
         return o
 
     def __call__(self, input_ids, attention_mask=None, **kwargs):
-        return self.forward(input_ids=input_ids, attention_mask=attention_mask, return_dict=True)
+        return self.forward(input_ids=input_ids, attention_mask=attention_mask, return_dict=True, output_hidden_states=kwargs.pop("output_hidden_states", False))
 
     @property
     def text_model(self):
@@ -104,8 +108,12 @@ class DummyTokenizer():
                          else x
                          for x in tokenized]
         padding_strategy = kwargs.get('padding', 'do_not_pad')
-        if padding_strategy != 'do_not_pad':
-            raise Exception(f"for unit tests only 'do_not_pad' is supported as a padding strategy (got '{padding_strategy}')")
+        if padding_strategy not in ['do_not_pad', 'max_length']:
+            raise Exception(f"for unit tests only 'do_not_pad' and 'max_length' is supported as a padding strategy (got '{padding_strategy}')")
+
+        if padding_strategy == "max_length":
+            tokenized = [(tokens[:-1] + (self.model_max_length - len(tokens)) * [self.pad_token_id] + tokens[1:]) for tokens in tokenized]
+
         return {'input_ids': tokenized}
 
     def convert_tokens_to_ids(self, token_str):

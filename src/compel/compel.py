@@ -7,7 +7,7 @@ from transformers import CLIPTokenizer, CLIPTextModel
 
 from . import cross_attention_control
 from .conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
-from .embeddings_provider import EmbeddingsProvider, BaseTextualInversionManager, DownweightMode
+from .embeddings_provider import EmbeddingsProvider, BaseTextualInversionManager, DownweightMode, EmbeddingsProviderMulti
 from .prompt_parser import Blend, FlattenedPrompt, PromptParser, CrossAttentionControlSubstitute, Conjunction
 
 __all__ = ["Compel", "DownweightMode"]
@@ -21,15 +21,18 @@ class Compel:
 
 
     def __init__(self,
-                 tokenizer: CLIPTokenizer,
-                 text_encoder: CLIPTextModel,
+                 tokenizer: Union[CLIPTokenizer, List[CLIPTokenizer]],
+                 text_encoder: Union[CLIPTextModel, List[CLIPTextModel]],
                  textual_inversion_manager: Optional[BaseTextualInversionManager] = None,
                  dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
                  truncate_long_prompts: bool = True,
                  padding_attention_mask_value: int = 1,
                  downweight_mode: DownweightMode = DownweightMode.MASK,
-                 use_penultimate_clip_layer: bool=False,
-                 device: Optional[str] = None):
+                 use_penultimate_clip_layer: Union[bool, List[bool]]=False,
+                 use_penultimate_layer_norm: Union[bool, List[bool]]=False,
+                 requires_pooled: Union[bool, List[bool]]=False,
+                 device: Optional[str] = None
+                 ):
         """
         Initialize Compel. The tokenizer and text_encoder can be lifted directly from any DiffusionPipeline.
 
@@ -50,22 +53,42 @@ class Compel:
         `device`: The torch device on which the tensors should be created. If a device is not specified, the device will
             be the same as that of the `text_encoder` at the moment when `build_conditioning_tensor()` is called.
         """
-        self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
-                                                        text_encoder=text_encoder,
-                                                        textual_inversion_manager=textual_inversion_manager,
-                                                        dtype_for_device_getter=dtype_for_device_getter,
-                                                        truncate=truncate_long_prompts,
-                                                        padding_attention_mask_value = padding_attention_mask_value,
-                                                        downweight_mode=downweight_mode,
-                                                        use_penultimate_clip_layer=use_penultimate_clip_layer
-                                                        )
+        if isinstance(tokenizer, (tuple, list)) and not isinstance(text_encoder, (tuple, list)):
+            raise ValueError("Cannot provide list of tokenizers, but not of text encoders.")
+        elif not isinstance(tokenizer, (tuple, list)) and isinstance(text_encoder, (tuple, list)):
+            raise ValueError("Cannot provide list of text encoders, but not of tokenizers.")
+        elif isinstance(tokenizer, (tuple, list)) and isinstance(text_encoder, (tuple, list)):
+            self.conditioning_provider = EmbeddingsProviderMulti(tokenizers=tokenizer,
+                                                            text_encoders=text_encoder,
+                                                            textual_inversion_manager=textual_inversion_manager,
+                                                            dtype_for_device_getter=dtype_for_device_getter,
+                                                            truncate=truncate_long_prompts,
+                                                            padding_attention_mask_value = padding_attention_mask_value,
+                                                            downweight_mode=downweight_mode,
+                                                            use_penultimate_clip_layer=use_penultimate_clip_layer,
+                                                            use_penultimate_layer_norm=use_penultimate_layer_norm,
+                                                            requires_pooled=requires_pooled,
+                                                            )
+        else:
+            self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
+                                                            text_encoder=text_encoder,
+                                                            textual_inversion_manager=textual_inversion_manager,
+                                                            dtype_for_device_getter=dtype_for_device_getter,
+                                                            truncate=truncate_long_prompts,
+                                                            padding_attention_mask_value = padding_attention_mask_value,
+                                                            downweight_mode=downweight_mode,
+                                                            use_penultimate_clip_layer=use_penultimate_clip_layer,
+                                                            use_penultimate_layer_norm=use_penultimate_layer_norm,
+                                                            requires_pooled=requires_pooled,
+                                                            )
+
         self._device = device
 
     @property
     def device(self):
         return self._device if self._device else self.conditioning_provider.text_encoder.device
 
-    def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str='') -> ConditioningScheduler:
+    def make_conditioning_scheduler(self, positive_prompt: str, negative_prompt: str='')  -> ConditioningScheduler:
         """
         Return a ConditioningScheduler object that provides conditioning tensors for different diffusion steps (currently
         not fully implemented).
@@ -78,13 +101,19 @@ class Compel:
         return StaticConditioningScheduler(positive_conditioning=positive_conditioning,
                                            negative_conditioning=negative_conditioning)
 
-    def build_conditioning_tensor(self, text: str) -> torch.Tensor:
+    def build_conditioning_tensor(self, text: str, return_pooled: bool = False) -> torch.Tensor:
         """
         Build a conditioning tensor by parsing the text for Compel syntax, constructing a Conjunction, and then
         building a conditioning tensor from that Conjunction.
         """
         conjunction = self.parse_prompt_string(text)
         conditioning, _ = self.build_conditioning_tensor_for_conjunction(conjunction)
+
+        pooled = self.conditioning_provider.maybe_get_pooled([text])
+
+        if return_pooled and pooled is not None:
+            return conditioning, pooled
+
         return conditioning
 
     @torch.no_grad()
@@ -100,11 +129,21 @@ class Compel:
             text = [text]
 
         cond_tensor = []
+        pooled = []
         for text_input in text:
-            cond_tensor.append(self.build_conditioning_tensor(text_input))
+            output = self.build_conditioning_tensor(text_input, return_pooled=True)
+
+            requires_pooled = len(output) > 1
+            cond_tensor.append(output[0] if requires_pooled else output)
+
+            if requires_pooled:
+                pooled.append(output[1])
 
         cond_tensor = self.pad_conditioning_tensors_to_same_length(conditionings=cond_tensor)
         cond_tensor = torch.cat(cond_tensor)
+
+        if len(pooled) > 0:
+            return cond_tensor, torch.cat(pooled)
 
         return cond_tensor
 

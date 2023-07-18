@@ -73,6 +73,22 @@ class CompelTestCase(unittest.TestCase):
                                        conditioning,
                                        atol=1e-6))
 
+    def test_basic_prompt_multi_text_encoder(self):
+        tokenizer_1 = DummyTokenizer()
+        text_encoder_1 = DummyTransformer()
+
+        tokenizer_2 = DummyTokenizer()
+        text_encoder_2 = DummyTransformer()
+
+        compel = Compel(tokenizer=[tokenizer_1, tokenizer_2], text_encoder=[text_encoder_1, text_encoder_2], use_penultimate_clip_layer=True, use_penultimate_layer_norm=False, requires_pooled=[False, True])
+
+        # test "a b c" makes it to the Conditioning intact for t=0, t=0.5, t=1
+        prompt = " ".join(KNOWN_WORDS[:3])
+        output, pooled = compel(prompt)
+
+        assert output.shape == (1, 77, 2 * 768)
+        assert pooled.shape == (1, 768)
+
 
     def test_basic_negative_prompt(self):
         tokenizer = DummyTokenizer()
