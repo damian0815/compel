@@ -29,20 +29,25 @@ class Compel()
 #### \_\_init\_\_
 
 ```python
-def __init__(tokenizer: CLIPTokenizer,
-             text_encoder: CLIPTextModel,
-             textual_inversion_manager: Optional[
-                 BaseTextualInversionManager] = None,
-             dtype_for_device_getter: Callable[
-                 [torch.device], torch.dtype] = lambda device: torch.float32,
-             truncate_long_prompts: bool = True,
-             padding_attention_mask_value: int = 1,
-             downweight_mode: DownweightMode = DownweightMode.MASK,
-             use_penultimate_clip_layer: bool = False,
-             device: Optional[str] = None)
+def __init__(
+        tokenizer: Union[CLIPTokenizer, List[CLIPTokenizer]],
+        text_encoder: Union[CLIPTextModel, List[CLIPTextModel]],
+        textual_inversion_manager: Optional[
+            BaseTextualInversionManager] = None,
+        dtype_for_device_getter: Callable[
+            [torch.device], torch.dtype] = lambda device: torch.float32,
+        truncate_long_prompts: bool = True,
+        padding_attention_mask_value: int = 1,
+        downweight_mode: DownweightMode = DownweightMode.MASK,
+        returned_embeddings_type: ReturnedEmbeddingsType = ReturnedEmbeddingsType
+    .LAST_HIDDEN_STATES_NORMALIZED,
+        requires_pooled: Union[bool, List[bool]] = False,
+        device: Optional[str] = None)
 ```
 
-Initialize Compel. The tokenizer and text_encoder can be lifted directly from any DiffusionPipeline.
+Initialize Compel. The tokenizer and text_encoder can be lifted directly from any DiffusionPipeline. For SDXL,
+you'll be using multiple Tokenizers and multiple Text Encoders - see `https://github.com/damian0815/compel/pull/41`
+for details.
 
 `textual_inversion_manager`: Optional instance to handle expanding multi-vector textual inversion tokens.
 `dtype_for_device_getter`: A Callable that returns a torch dtype for a given device. You probably don't need to
@@ -56,8 +61,10 @@ Initialize Compel. The tokenizer and text_encoder can be lifted directly from an
 `padding_attention_mask_value`: Value to write into the attention mask for padding tokens. Stable Diffusion needs 1.
 `downweight_mode`: Specifies whether downweighting should be applied by MASKing out the downweighted tokens
     (default) or REMOVEing them (legacy behaviour; messes up position embeddings of tokens following).
-`use_penultimate_clip_layer`: If True, use the penultimate hidden layer output of the CLIP text encoder's output,
-    rather than the final hidden layer output.
+`returned_embeddings_type`: controls how the embedding vectors are taken from the result of running the text
+    encoder over the parsed prompt's text. For SD<=2.1, use LAST_HIDDEN_STATES_NORMALIZED, or
+    PENULTIMATE_HIDDEN_STATES_NORMALIZED if you want to do "clip skip". For SDXL use PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED.
+`requires_pooled`: for SDXL, append the pooled embeddings when returning conditioning tensors
 `device`: The torch device on which the tensors should be created. If a device is not specified, the device will
     be the same as that of the `text_encoder` at the moment when `build_conditioning_tensor()` is called.
 

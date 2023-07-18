@@ -85,6 +85,23 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 ## Changelog
 
+### 2.0.0 - SDXL Support
+
+With big thanks to Patrick von Platen from Hugging Face for [the pull request](https://github.com/damian0815/compel/pull/41), Compel now supports SDXL. Use it like this: 
+
+```
+pipeline = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-0.9", variant="fp16", use_safetensors=True, torch_dtype=torch.float16).to("cuda")
+compel = Compel(tokenizer=[pipeline.tokenizer, pipeline.tokenizer_2] , text_encoder=[pipeline.text_encoder, pipeline.text_encoder_2], returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED, requires_pooled=[False, True])
+# upweight "ball"
+prompt = "a cat playing with a ball++ in the forest"
+conditioning, pooled = compel(prompt)
+# generate image
+image = pipeline(prompt_embeds=conditioning, pooled_prompt_embeds=pooled, num_inference_steps=30).images[0]
+```
+
+Please note that this is a **breaking change** if you've been using clip skip: the old boolean arg `use_penultimate_clip_layer` has been replaced with an enum `ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NORMALIZED`.
+
+
 #### 1.2.1 - actually apply `.and()` weights
 
 ### 1.2.0 - Concatenate embeddings using `.and()`
