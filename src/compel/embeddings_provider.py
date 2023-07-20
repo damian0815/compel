@@ -46,9 +46,9 @@ class EmbeddingsProvider:
         `padding_attention_mask_value`: Value to write into the attention mask for padding tokens. Stable Diffusion needs 1.
         `downweight_mode`: if MASK, downweight by blending with a version of the prompt with the downweighted terms masked out.
                     if REMOVE, the blend is against a version of the prompt with the downweighted tokens removed
-        `use_penultimate_clip_layer`: Whether to tuse the penultimate hidden state output of the CLIP emcoder (True) or
-                    the final hidden state output (False, default).
-        `requires_pooled`:
+        `returned_embeddings_type`: controls how the embedding vectors are taken from the result of running the text
+            encoder over the parsed prompt's text. For SD<=2.1, use LAST_HIDDEN_STATES_NORMALIZED, or
+            PENULTIMATE_HIDDEN_STATES_NORMALIZED if you want to do "clip skip". For SDXL use PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED.
         """
         self.tokenizer = tokenizer
         self.text_encoder = text_encoder
@@ -190,7 +190,8 @@ class EmbeddingsProvider:
         else:
             return batch_z
 
-    def get_token_ids(self, texts: List[str], include_start_and_end_markers: bool = True, padding: str = 'do_not_pad') -> List[List[int]]:
+    def get_token_ids(self, texts: List[str], include_start_and_end_markers: bool = True, padding: str = 'do_not_pad',
+                      truncation_override: Optional[bool] = None) -> List[List[int]]:
         """
         Convert a list of strings like `["a cat", "a dog", "monkey riding a bicycle"]` into a list of lists of token
         ids like `[[bos, 0, 1, eos], [bos, 0, 2, eos], [bos, 3, 4, 0, 5, eos]]`. bos/eos markers are skipped if
@@ -200,13 +201,16 @@ class EmbeddingsProvider:
         :param texts: The strings to convert.
         :param include_start_and_end_markers: If True (default), returned token id lists will start with the beginning
             of sequence marker and end with the end-of-sequence marker (`eos`).
+        :padding: Padding argument passed through to the Tokenizer.
+        :truncation_override: Optional, overrides the `truncate` argument passed to `__init__`.
         :return: A list of lists of token ids corresponding to the input strings.
         """
         # for args documentation of self.tokenizer() see ENCODE_KWARGS_DOCSTRING in tokenization_utils_base.py
         # (part of `transformers` lib)
+        truncation = self.truncate_to_model_max_length if truncation_override is None else truncation_override
         token_ids_list = self.tokenizer(
             texts,
-            truncation=self.truncate_to_model_max_length,
+            truncation=truncation,
             padding=padding,
             return_tensors=None,  # just give me lists of ints
         )['input_ids']
@@ -228,7 +232,7 @@ class EmbeddingsProvider:
         return result
 
     def get_pooled_embeddings(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
-        token_ids = self.get_token_ids(texts, padding="max_length")
+        token_ids = self.get_token_ids(texts, padding="max_length", truncation_override=True)
         token_ids = torch.tensor(token_ids, dtype=torch.long).to(self.text_encoder.device)
 
         text_encoder_output = self.text_encoder(token_ids, attention_mask, return_dict=True)
