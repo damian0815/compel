@@ -110,7 +110,7 @@ class Compel:
         conditioning, _ = self.build_conditioning_tensor_for_conjunction(conjunction)
 
         if self.requires_pooled:
-            pooled = self.conditioning_provider.get_pooled_embeddings([text] )
+            pooled = self.conditioning_provider.get_pooled_embeddings([text], device=self.device)
             return conditioning, pooled
         else:
             return conditioning

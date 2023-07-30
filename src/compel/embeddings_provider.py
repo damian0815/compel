@@ -231,9 +231,12 @@ class EmbeddingsProvider:
 
         return result
 
-    def get_pooled_embeddings(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
+    def get_pooled_embeddings(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None, device: Optional[str]=None]) -> Optional[torch.Tensor]:
+        
+        device = device or self.text_encoder.device
+        
         token_ids = self.get_token_ids(texts, padding="max_length", truncation_override=True)
-        token_ids = torch.tensor(token_ids, dtype=torch.long).to(self.text_encoder.device)
+        token_ids = torch.tensor(token_ids, dtype=torch.long).to(device)
 
         text_encoder_output = self.text_encoder(token_ids, attention_mask, return_dict=True)
         pooled = text_encoder_output.text_embeds
@@ -497,8 +500,11 @@ class EmbeddingsProviderMulti:
         # so for simplicity, we just return `get_token_ids` of the first tokenizer
         return self.embedding_providers[0].get_token_ids(self, *args, **kwargs)
 
-    def get_pooled_embeddings(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
-        pooled = [self.embedding_providers[provider_index].get_pooled_embeddings(texts, attention_mask)
+    def get_pooled_embeddings(
+        self, texts: List[str], attention_mask: Optional[torch.Tensor] = None, device: Optional[str] = None
+    ) -> Optional[torch.Tensor]:
+
+        pooled = [self.embedding_providers[provider_index].get_pooled_embeddings(texts, attention_mask, device=device)
                   for provider_index, requires_pooled in enumerate(self.requires_pooled_mask) if requires_pooled]
 
         if len(pooled) == 0:
