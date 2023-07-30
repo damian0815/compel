@@ -36,7 +36,7 @@ def run_and():
                       num_inference_steps=24, width=768, height=512).images
     return images
 
-def run_and_multi():
+def run_and_batched():
     pp = '("a cat in the forest", "a fantasy forest").and()'
     np = 'ugly, sketch, scribble'
 
@@ -51,8 +51,10 @@ def run_and_multi():
     return images
 
 
-images = run_and_multi()
 #images = run_single()
+#images = run_and()
+images = run_and_batched()
+
 for index,image in enumerate(images):
     image.save(f'img{index}.jpg')
 print(f"images saved to {os.getcwd()}")
