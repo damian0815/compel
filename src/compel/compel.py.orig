@@ -110,7 +110,11 @@ class Compel:
         conditioning, _ = self.build_conditioning_tensor_for_conjunction(conjunction)
 
         if self.requires_pooled:
+<<<<<<< HEAD
+            pooled = self.conditioning_provider.get_pooled_embeddings([text] )
+=======
             pooled = self.conditioning_provider.get_pooled_embeddings([text], device=self.device)
+>>>>>>> cmdr2/cpu_offload_sdxl
             return conditioning, pooled
         else:
             return conditioning
@@ -190,15 +194,7 @@ class Compel:
                 [padded_empty_conditioning, _] = self.pad_conditioning_tensors_to_same_length([empty_conditioning, this_conditioning])
                 this_conditioning = padded_empty_conditioning + (this_conditioning - padded_empty_conditioning) * weight
             to_concat.append(this_conditioning)
-        assert all(c.shape == to_concat[0].shape for c in to_concat)
-        if len(to_concat[0].shape) == 2:
-            token_dim = 0
-        elif len(to_concat[0].shape) == 3:
-            print("huh. weird. please file a bug on the Compel github repo stating that \"build_conditioning_tensor_for_conjunction shape has length 3\". include your prompts and the code you use to invoke Compel.")
-            token_dim = 1
-        else:
-            assert False, f"unhandled conditioning shape length: {to_concat[0].shape}"
-        return torch.concat(to_concat, dim=token_dim), options
+        return torch.concat(to_concat, dim=1), options
 
 
     def build_conditioning_tensor_for_prompt_object(self, prompt: Union[Blend, FlattenedPrompt],
@@ -233,9 +229,7 @@ class Compel:
 
         if not all([c.shape[0] == c0_shape[0] and c.shape[2] == c0_shape[2] for c in conditionings]):
             raise ValueError(f"All conditioning tensors must have the same batch size ({c0_shape[0]}) and number of embeddings per token ({c0_shape[1]}")
-        
-        if len(emptystring_conditioning.shape) == 2:
-            emptystring_conditioning = emptystring_conditioning.unsqueeze(0)
+
         empty_z = torch.cat([emptystring_conditioning] * c0_shape[0])
         max_token_count = max([c.shape[1] for c in conditionings])
         # if necessary, pad shorter tensors out with an emptystring tensor

@@ -85,6 +85,8 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 ## Changelog
 
+#### 2.0.1 - fix for [#45](https://github.com/damian0815/compel/issues/45) padding issue with SDXL non-truncated prompts and `.and()` 
+
 ### 2.0.0 - SDXL Support
 
 With big thanks to Patrick von Platen from Hugging Face for [the pull request](https://github.com/damian0815/compel/pull/41), Compel now supports SDXL. Use it like this: 

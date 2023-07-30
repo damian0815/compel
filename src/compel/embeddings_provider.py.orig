@@ -231,12 +231,20 @@ class EmbeddingsProvider:
 
         return result
 
-    def get_pooled_embeddings(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None, device: Optional[str]=None) -> Optional[torch.Tensor]:
-        
+<<<<<<< HEAD
+    def get_pooled_embeddings(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None) -> Optional[torch.Tensor]:
+        token_ids = self.get_token_ids(texts, padding="max_length", truncation_override=True)
+        token_ids = torch.tensor(token_ids, dtype=torch.long).to(self.text_encoder.device)
+=======
+    def get_pooled_embeddings(
+        self, texts: List[str], attention_mask: Optional[torch.Tensor] = None, device: Optional[str] = None
+    ) -> Optional[torch.Tensor]:
+
         device = device or self.text_encoder.device
 
-        token_ids = self.get_token_ids(texts, padding="max_length", truncation_override=True)
+        token_ids = self.get_token_ids(texts, padding="max_length")
         token_ids = torch.tensor(token_ids, dtype=torch.long).to(device)
+>>>>>>> cmdr2/cpu_offload_sdxl
 
         text_encoder_output = self.text_encoder(token_ids, attention_mask, return_dict=True)
         pooled = text_encoder_output.text_embeds
