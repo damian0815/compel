@@ -190,11 +190,11 @@ class Compel:
                 [padded_empty_conditioning, _] = self.pad_conditioning_tensors_to_same_length([empty_conditioning, this_conditioning])
                 this_conditioning = padded_empty_conditioning + (this_conditioning - padded_empty_conditioning) * weight
             to_concat.append(this_conditioning)
-        assert all(c.shape == to_concat[0].shape for c in to_concat)
+        assert all(len(c.shape) == len(to_concat[0].shape) for c in to_concat)
         if len(to_concat[0].shape) == 2:
             token_dim = 0
         elif len(to_concat[0].shape) == 3:
-            print("huh. weird. please file a bug on the Compel github repo stating that \"build_conditioning_tensor_for_conjunction shape has length 3\". include your prompts and the code you use to invoke Compel.")
+            #print("huh. weird. please file a bug on the Compel github repo stating that \"build_conditioning_tensor_for_conjunction shape has length 3\". include your prompts and the code you use to invoke Compel.")
             token_dim = 1
         else:
             assert False, f"unhandled conditioning shape length: {to_concat[0].shape}"
