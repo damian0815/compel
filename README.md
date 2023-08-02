@@ -91,10 +91,12 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 With big thanks to Patrick von Platen from Hugging Face for [the pull request](https://github.com/damian0815/compel/pull/41), Compel now supports SDXL. Use it like this: 
 
-```
+```py
 from compel import Compel, ReturnedEmbeddingsType
 from diffusers import DiffusionPipeline
-pipeline = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-0.9", variant="fp16", use_safetensors=True, torch_dtype=torch.float16).to("cuda")
+import torch
+
+pipeline = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", variant="fp16", use_safetensors=True, torch_dtype=torch.float16).to("cuda")
 compel = Compel(tokenizer=[pipeline.tokenizer, pipeline.tokenizer_2] , text_encoder=[pipeline.text_encoder, pipeline.text_encoder_2], returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED, requires_pooled=[False, True])
 # upweight "ball"
 prompt = "a cat playing with a ball++ in the forest"
