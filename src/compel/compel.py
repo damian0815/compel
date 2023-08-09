@@ -56,6 +56,8 @@ class Compel:
         `device`: The torch device on which the tensors should be created. If a device is not specified, the device will
             be the same as that of the `text_encoder` at the moment when `build_conditioning_tensor()` is called.
         """
+        self._device = device
+        self.requires_pooled = requires_pooled
         if isinstance(tokenizer, (tuple, list)) and not isinstance(text_encoder, (tuple, list)):
             raise ValueError("Cannot provide list of tokenizers, but not of text encoders.")
         elif not isinstance(tokenizer, (tuple, list)) and isinstance(text_encoder, (tuple, list)):
@@ -80,9 +82,8 @@ class Compel:
                                                             padding_attention_mask_value = padding_attention_mask_value,
                                                             downweight_mode=downweight_mode,
                                                             returned_embeddings_type=returned_embeddings_type,
+                                                            device=self.device
                                                             )
-        self._device = device
-        self.requires_pooled = requires_pooled
 
     @property
     def device(self):
