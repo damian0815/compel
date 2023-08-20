@@ -34,7 +34,8 @@ class EmbeddingsProvider:
                  truncate: bool = True,
                  padding_attention_mask_value: int = 1,
                  downweight_mode: DownweightMode = DownweightMode.MASK,
-                 returned_embeddings_type: ReturnedEmbeddingsType = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED
+                 returned_embeddings_type: ReturnedEmbeddingsType = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED,
+                 device: Optional[str] = None
                  ):
         """
         `tokenizer`: converts strings to lists of int token ids
@@ -57,6 +58,7 @@ class EmbeddingsProvider:
         self.padding_attention_mask_value = padding_attention_mask_value
         self.downweight_mode = downweight_mode
         self.returned_embeddings_type = returned_embeddings_type
+        self.device = device if device else self.text_encoder.device
 
         # by default always use float32
         self.get_dtype_for_device = dtype_for_device_getter
@@ -233,7 +235,7 @@ class EmbeddingsProvider:
 
     def get_pooled_embeddings(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None, device: Optional[str]=None) -> Optional[torch.Tensor]:
         
-        device = device or self.text_encoder.device
+        device = device or self.device
 
         token_ids = self.get_token_ids(texts, padding="max_length", truncation_override=True)
         token_ids = torch.tensor(token_ids, dtype=torch.long).to(device)
@@ -345,7 +347,7 @@ class EmbeddingsProvider:
             raise ValueError(f"token_ids has shape {token_ids.shape} - expected a multiple of {self.max_token_count}")
 
         if device is None:
-            device = self.text_encoder.device
+            device = self.device
 
         chunk_start_index = 0
         empty_token_ids = torch.tensor([self.tokenizer.bos_token_id] +
