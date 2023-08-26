@@ -222,16 +222,12 @@ class Compel:
     @classmethod
     def _pad_conditioning_tensors_to_same_length(cls, conditionings: List[torch.Tensor], emptystring_conditioning: torch.Tensor
                                                  ) -> List[torch.Tensor]:
-        c0_shape = conditionings[0].shape
-        if not all([len(c.shape) == len(c0_shape) for c in conditionings]):
+        if not all([len(c.shape) in [2, 3] for c in conditionings]):
             raise ValueError("Conditioning tensors must all have either 2 dimensions (unbatched) or 3 dimensions (batched)")
-
-        if len(c0_shape) == 2:
-            # need to be unsqueezed
-            conditionings = [c.unsqueeze(0) for c in conditionings]
-            c0_shape = conditionings[0].shape
-        if len(c0_shape) != 3:
-            raise ValueError(f"All conditioning tensors must have the same number of dimensions (2 or 3)")
+         
+        # ensure all conditioning tensors are 3 dimensions
+        conditionings = [c.unsqueeze(0) if len(c.shape) == 2 else c for c in conditionings]
+        c0_shape = conditionings[0].shape
 
         if not all([c.shape[0] == c0_shape[0] and c.shape[2] == c0_shape[2] for c in conditionings]):
             raise ValueError(f"All conditioning tensors must have the same batch size ({c0_shape[0]}) and number of embeddings per token ({c0_shape[1]}")
