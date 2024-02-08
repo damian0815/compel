@@ -35,7 +35,8 @@ class EmbeddingsProvider:
                  padding_attention_mask_value: int = 1,
                  downweight_mode: DownweightMode = DownweightMode.MASK,
                  returned_embeddings_type: ReturnedEmbeddingsType = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED,
-                 device: Optional[str] = None
+                 device: Optional[str] = None,
+                 clip_skip: Optional[int] = None
                  ):
         """
         `tokenizer`: converts strings to lists of int token ids
@@ -59,6 +60,7 @@ class EmbeddingsProvider:
         self.downweight_mode = downweight_mode
         self.returned_embeddings_type = returned_embeddings_type
         self.device = device if device else self.text_encoder.device
+        self.clip_skip = clip_skip
 
         # by default always use float32
         self.get_dtype_for_device = dtype_for_device_getter
@@ -391,7 +393,10 @@ class EmbeddingsProvider:
                                                 attention_mask,
                                                 output_hidden_states=needs_hidden_states,
                                                 return_dict=True)
-        if self.returned_embeddings_type is ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED:
+        if self.clip_skip is not None:
+            penultimate_hidden_state = text_encoder_output.hidden_states[-self.clip_skip]
+            return penultimate_hidden_state
+        elif self.returned_embeddings_type is ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED:
             penultimate_hidden_state = text_encoder_output.hidden_states[-2]
             return penultimate_hidden_state
         elif self.returned_embeddings_type is ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NORMALIZED:
@@ -478,13 +483,14 @@ class EmbeddingsProviderMulti:
                 padding_attention_mask_value: int = 1,
                 downweight_mode: DownweightMode = DownweightMode.MASK,
                 returned_embeddings_type: Union[List[ReturnedEmbeddingsType], ReturnedEmbeddingsType] = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED,
-                 requires_pooled_mask: List[bool] = []
+                requires_pooled_mask: List[bool] = [],
+                clip_skip: Optional[int] = None
                 ):
 
         returned_embeddings_type = len(text_encoders) * [returned_embeddings_type] if not isinstance(returned_embeddings_type, (list,tuple)) else returned_embeddings_type
 
         self.embedding_providers = [
-            EmbeddingsProvider(tokenizer, text_encoder, textual_inversion_manager, dtype_for_device_getter, truncate, padding_attention_mask_value, downweight_mode, returned_embeddings_type)
+            EmbeddingsProvider(tokenizer, text_encoder, textual_inversion_manager, dtype_for_device_getter, truncate, padding_attention_mask_value, downweight_mode, returned_embeddings_type, clip_skip=clip_skip)
             for tokenizer, text_encoder, returned_embeddings_type in zip(tokenizers, text_encoders, returned_embeddings_type)
         ]
         self.requires_pooled_mask = requires_pooled_mask
