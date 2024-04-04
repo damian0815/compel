@@ -500,7 +500,7 @@ class EmbeddingsProviderMulti:
     def get_token_ids(self, *args, **kwargs):
         # get token ids does not use padding. The padding ID is the only ID that can differ between tokenizers
         # so for simplicity, we just return `get_token_ids` of the first tokenizer
-        return self.embedding_providers[0].get_token_ids(self, *args, **kwargs)
+        return self.embedding_providers[0].get_token_ids(*args, **kwargs)
 
     def get_pooled_embeddings(
         self, texts: List[str], attention_mask: Optional[torch.Tensor] = None, device: Optional[str] = None
