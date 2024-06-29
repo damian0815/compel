@@ -85,6 +85,8 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 ## Changelog
 
+#### 2.0.3 - include contributed fixes #64, #80 and fix license in pyproject.toml/pypi
+
 #### 2.0.2 - fix for `pipeline.enable_sequential_cpu_offloading()` with SDXL models (you need to pass `device='cuda'` on compel init)
 
 #### 2.0.1 - fix for [#45](https://github.com/damian0815/compel/issues/45) padding issue with SDXL non-truncated prompts and `.and()` 
