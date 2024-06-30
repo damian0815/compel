@@ -48,14 +48,23 @@ class DummyTransformer:
         return self.embeddings
 
     def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor], output_hidden_states: bool=False, return_dict: bool=True):
-        if input_ids.shape[0] > 1:
-            raise AssertionError("for unit testing, only batch size =1 is supported")
-        all_embeddings = torch.cat([e.unsqueeze(0) for e in self.embeddings]).to(self.device)
-        embeddings = torch.index_select(all_embeddings, dim=0, index=input_ids.to(self.device).squeeze(0)
-                                        ).unsqueeze(0)
-        if attention_mask is not None:
-            # this is not expected to match what Transformers actually does
-            embeddings = embeddings * attention_mask.unsqueeze(2).expand(embeddings.shape)
+        def forward_bs_1(input_ids, attention_mask, output_hidden_states, return_dict):
+            all_embeddings = torch.cat([e.unsqueeze(0) for e in self.embeddings]).to(self.device)
+            embeddings = torch.index_select(all_embeddings, dim=0, index=input_ids.to(self.device).squeeze(0)
+                                            ).unsqueeze(0)
+            if attention_mask is not None:
+                # this is not expected to match what Transformers actually does
+                while len(attention_mask.shape) < len(embeddings.shape):
+                    attention_mask = attention_mask.unsqueeze(-1)
+                embeddings = embeddings * attention_mask.expand(embeddings.shape)
+            return embeddings
+
+        embeddings = [forward_bs_1(input_ids[batch_index:batch_index+1],
+                                            attention_mask[batch_index:batch_index+1] if attention_mask is not None else None,
+                                            output_hidden_states, return_dict=False)
+                      for batch_index in range(input_ids.shape[0])]
+        embeddings = torch.concat(embeddings)
+
         if not return_dict:
             return [embeddings, torch.empty_like(embeddings)]
 
@@ -127,3 +136,6 @@ class DummyTokenizer():
             return 0
         self.tokens.append(token_str)
         return 1
+
+    def tokenize(self, token_str):
+        return [self.convert_tokens_to_ids(t) for t in token_str.split(" ")]

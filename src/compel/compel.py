@@ -219,30 +219,6 @@ class Compel:
 
         raise ValueError(f"unsupported prompt type: {type(prompt).__name__}")
 
-    @classmethod
-    def _pad_conditioning_tensors_to_same_length(cls, conditionings: List[torch.Tensor], emptystring_conditioning: torch.Tensor
-                                                 ) -> List[torch.Tensor]:
-        if not all([len(c.shape) in [2, 3] for c in conditionings]):
-            raise ValueError("Conditioning tensors must all have either 2 dimensions (unbatched) or 3 dimensions (batched)")
-         
-        # ensure all conditioning tensors are 3 dimensions
-        conditionings = [c.unsqueeze(0) if len(c.shape) == 2 else c for c in conditionings]
-        c0_shape = conditionings[0].shape
-
-        if not all([c.shape[0] == c0_shape[0] and c.shape[2] == c0_shape[2] for c in conditionings]):
-            raise ValueError(f"All conditioning tensors must have the same batch size ({c0_shape[0]}) and number of embeddings per token ({c0_shape[1]}")
-        
-        if len(emptystring_conditioning.shape) == 2:
-            emptystring_conditioning = emptystring_conditioning.unsqueeze(0)
-        empty_z = torch.cat([emptystring_conditioning] * c0_shape[0])
-        max_token_count = max([c.shape[1] for c in conditionings])
-        # if necessary, pad shorter tensors out with an emptystring tensor
-        for i, c in enumerate(conditionings):
-            while c.shape[1] < max_token_count:
-                c = torch.cat([c, empty_z], dim=1)
-                conditionings[i] = c
-        return conditionings
-
 
     def pad_conditioning_tensors_to_same_length(self, conditionings: List[torch.Tensor],
                                                 ) -> List[torch.Tensor]:
@@ -263,7 +239,7 @@ class Compel:
         if type(emptystring_conditioning) is tuple:
             # discard pooled
             emptystring_conditioning = emptystring_conditioning[0]
-        return type(self)._pad_conditioning_tensors_to_same_length(conditionings, emptystring_conditioning=emptystring_conditioning)
+        return EmbeddingsProvider._pad_conditioning_tensors_to_same_length(conditionings, emptystring_conditioning=emptystring_conditioning)
 
 
 

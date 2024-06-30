@@ -285,7 +285,7 @@ class CompelTestCase(unittest.TestCase):
 
         embeds_separate = torch.concat([compel('a b c a b c a b c'), compel('b a')], dim=1)
         embeds_concat = compel('("a b c a b c a b c", "b a").and()')
-        self.assertTrue(torch.allclose(embeds_concat, embeds_separate))
+a        self.assertTrue(torch.allclose(embeds_concat, embeds_separate))
 
 
         compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=True)
