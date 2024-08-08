@@ -37,7 +37,7 @@ If you've disabled truncation or if your prompt contains [`.and()` syntax](synta
 Finally, pass both of the tensors to your `StableDiffusionPipeline`, like this:
 
 ```python
-images = pipeline(prompt_embeds=conditioning, negative_propmt_embeds=negative_conditioning).images
+images = pipeline(prompt_embeds=conditioning, negative_prompt_embeds=negative_conditioning).images
 images[0].save("image.jpg")
 ```
 
