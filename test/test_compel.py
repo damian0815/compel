@@ -190,6 +190,7 @@ class CompelTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
 
+        # test shape mismatch
         embeds_a = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length+1])
         embeds_b = torch.randn([1, tokenizer.model_max_length+1, text_encoder.embedding_length])
         with self.assertRaises(ValueError):
@@ -197,6 +198,11 @@ class CompelTestCase(unittest.TestCase):
 
         embeds_a = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length])
         embeds_b = torch.randn([tokenizer.model_max_length+1, text_encoder.embedding_length])
+        with self.assertRaises(ValueError):
+            _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
+
+        embeds_a = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length])
+        embeds_b = torch.randn([tokenizer.model_max_length, text_encoder.embedding_length+1])
         with self.assertRaises(ValueError):
             _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
 

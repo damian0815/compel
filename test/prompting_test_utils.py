@@ -4,7 +4,7 @@ from unittest.mock import Mock, MagicMock
 import torch
 from torch import nn
 
-KNOWN_WORDS = ['a', 'b', 'c', 'gone/w', 'home/w', 'into/w', './w', ',/w', ':/w', ';/w']
+KNOWN_WORDS = ['a', 'b', 'c', 'gone</w>', 'home</w>', 'into</w>', '.</w>', ',</w>', ':</w>', ';</w>']
 KNOWN_WORDS_TOKEN_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 UNKNOWN_WORDS = ['d', 'e', 'f']
 
