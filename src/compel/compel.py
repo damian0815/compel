@@ -230,10 +230,13 @@ class Compel:
         c0_shape = conditionings[0].shape
 
         if not all([c.shape[0] == c0_shape[0] and c.shape[2] == c0_shape[2] for c in conditionings]):
-            raise ValueError(f"All conditioning tensors must have the same batch size ({c0_shape[0]}) and number of embeddings per token ({c0_shape[1]}")
-        
+            raise ValueError(f"All conditioning tensors must have the same batch size ({c0_shape[0]}) and number of embeddings per token ({c0_shape[2]}")
+
         if len(emptystring_conditioning.shape) == 2:
             emptystring_conditioning = emptystring_conditioning.unsqueeze(0)
+        if not all([c.shape[1] % emptystring_conditioning.shape[1] == 0 for c in conditionings]):
+            raise ValueError(f"All conditioning tensors must have a token count that is a multiple of the emptystring conditioning token count {emptystring_conditioning.shape[1]}")
+
         empty_z = torch.cat([emptystring_conditioning] * c0_shape[0])
         max_token_count = max([c.shape[1] for c in conditionings])
         # if necessary, pad shorter tensors out with an emptystring tensor
