@@ -41,7 +41,7 @@ class EmbeddingsProvider:
                  downweight_mode: DownweightMode = DownweightMode.MASK,
                  returned_embeddings_type: ReturnedEmbeddingsType = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED,
                  device: Optional[str] = None,
-                 split_long_text_mode: SplitLongTextMode = SplitLongTextMode.BRUTAL,
+                 split_long_text_mode: SplitLongTextMode = SplitLongTextMode.WORDS,
                  ):
         """
         `tokenizer`: converts strings to lists of int token ids
