@@ -4,8 +4,8 @@ from unittest.mock import Mock, MagicMock
 import torch
 from torch import nn
 
-KNOWN_WORDS = ['a', 'b', 'c']
-KNOWN_WORDS_TOKEN_IDS = [0, 1, 2]
+KNOWN_WORDS = ['a', 'b', 'c', 'gone/w', 'home/w', 'into/w', './w', ',/w', ':/w', ';/w']
+KNOWN_WORDS_TOKEN_IDS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 UNKNOWN_WORDS = ['d', 'e', 'f']
 
 class DummyEmbeddingsList(list):
@@ -116,11 +116,18 @@ class DummyTokenizer():
 
         return {'input_ids': tokenized}
 
-    def convert_tokens_to_ids(self, token_str):
-        try:
-            return self.tokens.index(token_str)
-        except ValueError:
-            return self.unk_token_id
+    def convert_tokens_to_ids(self, tokens_str: list[str]) -> list[int]:
+        result = []
+        for token_str in tokens_str:
+            try:
+                result.append(self.tokens.index(token_str))
+            except ValueError:
+                result.append(self.unk_token_id)
+        return result
+
+    def convert_ids_to_tokens(self, tokens_id: list[int]) -> list[str]:
+        return [self.tokens[token_id] for token_id in tokens_id]
+
 
     def add_tokens(self, token_str):
         if token_str in self.tokens:

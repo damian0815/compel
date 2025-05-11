@@ -3,7 +3,7 @@ import unittest
 
 import torch
 
-from src.compel.embeddings_provider import EmbeddingsProvider, DownweightMode
+from src.compel.embeddings_provider import EmbeddingsProvider, DownweightMode, SplitLongTextMode
 from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS, NullTransformer
 
 
@@ -86,6 +86,24 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         self.assertTrue(torch.equal(weights_tensor, torch.tensor(
             ([1.0] + [0.8] * 3 + [1.0]) * 3 + ([1.0] + [0.8] + [1.0]) + ([1.0] * 2))))
         self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1] * 3 + [1, 1, 1] + [0, 0])))
+
+    def test_split(self):
+        tokenizer = DummyTokenizer(model_max_length=7)
+        text_encoder = DummyTransformer()
+        embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder,
+                                                 truncate=False, split_long_text_mode=SplitLongTextMode.BRUTAL)
+
+        tokens = ["gone/w", "./w", "a", "b", "into/w",
+                  "a", "b", "c", "a", "b",
+                  "c", "a", "b", "home/w",
+                  "a", "b", ";/w",
+                  "c", "a"]
+        token_ids = tokenizer.convert_tokens_to_ids(tokens)
+        self.assertTrue(tokens == tokenizer.convert_ids_to_tokens(token_ids))
+
+        chunked = embeddings_provider._chunk_and_pad_token_ids(token_ids=token_ids, token_weights=[1] * len(token_ids), device='cpu')
+        print(chunked)
+
 
     def test_tokenize_to_mask(self):
         tokenizer = DummyTokenizer(model_max_length=7)
