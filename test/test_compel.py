@@ -304,6 +304,15 @@ class CompelTestCase(unittest.TestCase):
         embeds_concat = compel('("a b c a b c a b c", "b a").and()')
         self.assertTrue(torch.allclose(embeds_concat, embeds_separate))
 
+    def test_end_to_end_split(self):
+
+        max_length = 5
+        tokenizer = DummyTokenizer(model_max_length=max_length)
+        text_encoder = DummyTransformer()
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
+        text = "a b gone</w> a b .</w> gone</w> home</w> a .</w>"
+        # should not raise any exceptions
+        _ = compel(text)
 
 
 if __name__ == '__main__':

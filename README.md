@@ -85,6 +85,8 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 ## Changelog
 
+#### 2.1.1 - expose `split_long_text_mode` to top-level Compel, default to `SENTENCES`, fix bug where splitting would fail sometimes.
+
 ### 2.1.0 - add `split_long_text_mode` arg to control word splitting for long prompts when `truncate_long_prompts` is False. See `SplitLongTextMode`. Defaults to `WORDS`. 
 
 #### 2.0.3 - include contributed fixes #64, #80 and fix license in pyproject.toml/pypi
