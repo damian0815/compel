@@ -17,7 +17,8 @@ class DownweightMode(Enum):
 class SplitLongTextMode(Enum):
     BRUTAL = 0 # brutally split at context-size boundaries, likely slicing words and phrases in half
     WORDS = 1  # split at word boundaries
-    PHRASES = 2 # try to split at phrase boundaries, denoted by ',' '.' ':' or ';', otherwise split at words
+    PHRASES = 2 # try to split at phrase boundaries, denoted by ',' '.' ':' or ';' . fallback to WORDS on failure
+    SENTENCES = 3 # try to split at sentence boundaries, denoted by '.' . fallback to PHRASES on failure
 
 class BaseTextualInversionManager(ABC):
     def expand_textual_inversion_token_ids_if_necessary(self, token_ids: List[int]) -> List[int]:
@@ -41,7 +42,7 @@ class EmbeddingsProvider:
                  downweight_mode: DownweightMode = DownweightMode.MASK,
                  returned_embeddings_type: ReturnedEmbeddingsType = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED,
                  device: Optional[str] = None,
-                 split_long_text_mode: SplitLongTextMode = SplitLongTextMode.WORDS,
+                 split_long_text_mode: SplitLongTextMode = SplitLongTextMode.SENTENCES,
                  ):
         """
         `tokenizer`: converts strings to lists of int token ids
@@ -287,26 +288,39 @@ class EmbeddingsProvider:
 
         return self._chunk_and_pad_token_ids(all_token_ids, all_token_weights, device=device)
 
-    def _find_next_best_split_point(self, token_ids: List[int], max_length, phrase_separating_punctuation = None) -> int:
+    def _find_next_best_split_point(self, token_ids: List[int], max_length, phrase_separating_punctuation = None, sentence_separating_punctuation = None) -> int:
         if (self.truncate_to_model_max_length
                 or self.split_long_text_mode == SplitLongTextMode.BRUTAL
                 or len(token_ids) <= max_length):
             return max_length
         if phrase_separating_punctuation is None:
             phrase_separating_punctuation = ['.</w>', ',</w>', ';</w>', ':</w>']
+        if sentence_separating_punctuation is None:
+            sentence_separating_punctuation = ['.</w>']
         tokens_text = self.tokenizer.convert_ids_to_tokens(token_ids)
 
         def find_split_point(tokens_text: List[str], mode: SplitLongTextMode) -> int | None:
             for index, token in reversed(list(enumerate(tokens_text[:max_length]))):
                 if mode == SplitLongTextMode.WORDS and token.endswith('</w>'):
+                    #print('found word end at', index, ':', tokens_text[max(0, index-5):index])
                     return index
                 elif mode == SplitLongTextMode.PHRASES and token in phrase_separating_punctuation:
+                    #print('found phrase end at', index, ':', tokens_text[max(0, index-5):index])
+                    return index
+                elif mode == SplitLongTextMode.SENTENCES and token in sentence_separating_punctuation:
+                    #print('found sentence end at', index, ':', tokens_text[max(0, index-5):index])
                     return index
             return None
         word_end_token_index = find_split_point(tokens_text, self.split_long_text_mode)
+        split_mode = self.split_long_text_mode
+        # if SENTENCES fails, fall back to PHRASES
+        if word_end_token_index is None and split_mode == SplitLongTextMode.SENTENCES:
+            word_end_token_index = find_split_point(tokens_text, SplitLongTextMode.PHRASES)
+            split_mode = SplitLongTextMode.PHRASES
         # if PHRASES fails, fall back to WORDS
-        if word_end_token_index is None and self.split_long_text_mode == SplitLongTextMode.PHRASES:
+        if word_end_token_index is None and split_mode == SplitLongTextMode.PHRASES:
             word_end_token_index = find_split_point(tokens_text, SplitLongTextMode.WORDS)
+            split_mode = SplitLongTextMode.WORDS
         if word_end_token_index is not None:
             return word_end_token_index + 1
 
@@ -328,6 +342,7 @@ class EmbeddingsProvider:
         max_length = chunk_length_without_eos_bos_markers
         while True:
             split_point = self._find_next_best_split_point(remaining_token_ids, max_length=max_length)
+            #print('splitting at', split_point)
             chunk_token_ids = remaining_token_ids[0:split_point]
             chunk_token_weights = remaining_token_weights[0:split_point]
             # update remaining
@@ -428,13 +443,13 @@ class EmbeddingsProvider:
                                                 attention_mask,
                                                 output_hidden_states=needs_hidden_states,
                                                 return_dict=True)
-        if self.returned_embeddings_type is ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED:
+        if self.returned_embeddings_type == ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED:
             penultimate_hidden_state = text_encoder_output.hidden_states[-2]
             return penultimate_hidden_state
-        elif self.returned_embeddings_type is ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NORMALIZED:
+        elif self.returned_embeddings_type == ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NORMALIZED:
             penultimate_hidden_state = text_encoder_output.hidden_states[-2]
             return self.text_encoder.text_model.final_layer_norm(penultimate_hidden_state)
-        elif self.returned_embeddings_type is ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED:
+        elif self.returned_embeddings_type == ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED:
             # already normalized
             return text_encoder_output.last_hidden_state
 
@@ -481,17 +496,17 @@ class EmbeddingsProvider:
                     else:
                         raise RuntimeError(
                             f"couldn't find end of token sequence for fragment at index {fragment_index} '{fragments[fragment_index]}'")
-                if not self.truncate_to_model_max_length and (
-                        chunked_and_padded_token_ids[fragment_end] == self.tokenizer.eos_token_id
-                        or chunked_and_padded_token_ids[fragment_end] == self.tokenizer.bos_token_id
-                ):
-                    # bos/eos: chunk boundaries
-                    fragment_end += 1
-                elif chunked_and_padded_token_ids[fragment_end] == fragment_token_ids[fragment_relative_index]:
+                if chunked_and_padded_token_ids[fragment_end] == fragment_token_ids[fragment_relative_index]:
                     # matching token
                     fragment_relative_index += 1
                     if fragment_relative_index == len(fragment_token_ids):
                         break
+                    fragment_end += 1
+                elif not self.truncate_to_model_max_length and (
+                        chunked_and_padded_token_ids[fragment_end] == self.tokenizer.eos_token_id or
+                        chunked_and_padded_token_ids[fragment_end] == self.tokenizer.pad_token_id or
+                        chunked_and_padded_token_ids[fragment_end] == self.tokenizer.bos_token_id):
+                    # bos/eos/pad: chunk boundaries
                     fragment_end += 1
                 else:
                     raise RuntimeError(
