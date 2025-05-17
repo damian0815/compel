@@ -299,7 +299,7 @@ class EmbeddingsProvider:
             sentence_separating_punctuation = ['.</w>']
         tokens_text = self.tokenizer.convert_ids_to_tokens(token_ids)
 
-        def find_split_point(tokens_text: List[str], mode: SplitLongTextMode) -> int | None:
+        def find_split_point(tokens_text: List[str], mode: SplitLongTextMode) -> Optional[int]:
             for index, token in reversed(list(enumerate(tokens_text[:max_length]))):
                 if mode == SplitLongTextMode.WORDS and token.endswith('</w>'):
                     #print('found word end at', index, ':', tokens_text[max(0, index-5):index])
