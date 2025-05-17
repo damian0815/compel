@@ -304,6 +304,15 @@ class CompelTestCase(unittest.TestCase):
         embeds_concat = compel('("a b c a b c a b c", "b a").and()')
         self.assertTrue(torch.allclose(embeds_concat, embeds_separate))
 
+    def test_end_to_end_split(self):
+
+        max_length = 77
+        tokenizer = DummyTokenizer(model_max_length=max_length)
+        text_encoder = DummyTransformer()
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
+        text = "As he crossed toward the pharmacy at the corner he involuntarily turned his head because of a burst of light that had ricochetedfromhistemple,andsaw,withthatquicksmilewithwhichwegreetarainboworarose,ablindingly white parallelogram of sky being unloaded from the van—a dresserwithmirrorsacross whichasacrossacinema screen, passed a flawlessly clear reflection of boughs sliding and swaying not arboreally, but with a human vacillation, produced by the nature of those who were carrying this sky, these boughs, this gliding façade. As he crossed toward the pharmacy at the corner he involuntarily turned his head because of a burst of light that had ricochetedfromhistemple,andsaw,withthatquicksmilewithwhichwegreetarainboworarose,ablindingly white parallelogram of sky being unloaded from the van—a dresserwithmirrorsacross whichasacrossacinema screen, passed a flawlessly clear reflection of boughs sliding and swaying not arboreally, but with a human vacillation, produced by the nature of those who were carrying this sky, these boughs, this gliding façade."
+        # should not raise any exceptions
+        _ = compel(text)
 
 
 if __name__ == '__main__':
