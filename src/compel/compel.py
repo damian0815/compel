@@ -4,6 +4,7 @@ from typing import Union, Optional, Callable, List, Tuple
 import torch
 from torch import Tensor
 from transformers import CLIPTokenizer, CLIPTextModel
+from pyparsing.exceptions import ParseException
 
 from . import cross_attention_control
 from .conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
@@ -159,7 +160,10 @@ class Compel:
         Parse the given prompt string and return a structured Conjunction object that represents the prompt it contains.
         """
         pp = PromptParser()
-        conjunction = pp.parse_conjunction(prompt_string)
+        try:
+            conjunction = pp.parse_conjunction(prompt_string)
+        except ParseException:
+            return Conjunction(prompts=[FlattenedPrompt([(prompt_string, 1.0)])], weights=[1.0])
         return conjunction
 
     def describe_tokenization(self, text: str) -> List[str]:
