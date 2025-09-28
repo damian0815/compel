@@ -19,7 +19,7 @@ Documentation is [here](doc/).
 
 ### Demo
 
-See [compel-demo.ipynb](compel-demo.ipynb)
+See [compel-demo.ipynb](notebooks/compel-demo.ipynb)
 
 <a target="_blank" href="https://colab.research.google.com/github/damian0815/compel/blob/main/compel-demo.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
