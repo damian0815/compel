@@ -115,13 +115,13 @@ class Compel:
         building a conditioning tensor from that Conjunction.
         """
         conjunction = self.parse_prompt_string(text)
-        conditioning, _ = self.build_conditioning_tensor_for_conjunction(conjunction)
+        output = self.build_conditioning_tensor_for_conjunction(conjunction)
 
+        # drop options dict
         if self.requires_pooled:
-            pooled = self.conditioning_provider.get_pooled_embeddings([text], device=self.device)
-            return conditioning, pooled
+            return output[0], output[1]
         else:
-            return conditioning
+            return output[0]
 
 
     @torch.no_grad()
@@ -177,11 +177,12 @@ class Compel:
         return self.conditioning_provider.tokenizer.tokenize(text)
 
 
-    def build_conditioning_tensor_for_conjunction(self, conjunction: Conjunction) -> Tuple[torch.Tensor, dict]:
+    def build_conditioning_tensor_for_conjunction(self, conjunction: Conjunction) -> Union[Tuple[torch.Tensor, torch.Tensor, dict], Tuple[torch.Tensor, dict]]:
         """
         Build a conditioning tensor for the given Conjunction object.
-        :return: A tuple of (conditioning tensor, options dict). The contents of the options dict depends on the prompt,
-        at the moment it is only used for returning cross-attention control conditioning data (`.swap()`).
+        :return: A tuple of (conditioning tensor, options dict) (or (conditining, conditining, options) if multiple
+        EmbeddingProviders are in use). The contents of the options dict depends on the prompt, at the moment it is only
+        used for returning cross-attention control conditioning data (`.swap()`).
         """
         if len(conjunction.prompts) > 1 and conjunction.type != 'AND':
             raise ValueError("Only AND conjunctions are supported by build_conditioning_tensor()")
@@ -199,15 +200,25 @@ class Compel:
                 [padded_empty_conditioning, _] = self.pad_conditioning_tensors_to_same_length([empty_conditioning, this_conditioning])
                 this_conditioning = padded_empty_conditioning + (this_conditioning - padded_empty_conditioning) * weight
             to_concat.append(this_conditioning)
-        assert all(len(c.shape) == len(to_concat[0].shape) for c in to_concat)
-        if len(to_concat[0].shape) == 2:
-            token_dim = 0
-        elif len(to_concat[0].shape) == 3:
-            #print("huh. weird. please file a bug on the Compel github repo stating that \"build_conditioning_tensor_for_conjunction shape has length 3\". include your prompts and the code you use to invoke Compel.")
-            token_dim = 1
+        def concat_conditioning_tensors(tensors: List[torch.Tensor]) -> torch.Tensor:
+            assert all(len(c.shape) == len(tensors[0].shape) for c in tensors)
+            if len(tensors[0].shape) == 2:
+                token_dim = 0
+            elif len(tensors[0].shape) == 3:
+                #print("huh. weird. please file a bug on the Compel github repo stating that \"build_conditioning_tensor_for_conjunction shape has length 3\". include your prompts and the code you use to invoke Compel.")
+                token_dim = 1
+            else:
+                assert False, f"unhandled conditioning shape length: {tensors[0].shape}"
+            return torch.concat(tensors, dim=token_dim)
+        if type(to_concat[0]) is list:
+            all_cond = []
+            all_pooled = []
+            for c in to_concat:
+                all_cond.append(c[0])
+                all_pooled.append(c[1])
+            return concat_conditioning_tensors(all_cond), concat_conditioning_tensors(all_pooled), options
         else:
-            assert False, f"unhandled conditioning shape length: {to_concat[0].shape}"
-        return torch.concat(to_concat, dim=token_dim), options
+            return concat_conditioning_tensors(to_concat), options
 
 
     def build_conditioning_tensor_for_prompt_object(self, prompt: Union[Blend, FlattenedPrompt],

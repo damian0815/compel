@@ -9,20 +9,7 @@ from typing import List, Union
 from diffusers import FluxPipeline
 import torch
 
-@dataclass(frozen=True)
-class CompelEmbeddings:
-    pooled_embeds: torch.Tensor|None
-    embeds: torch.Tensor|None
-
-class CompelForFlux:
-    def __init__(self, pipe: FluxPipeline):
-        self.compel_1 = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder, requires_pooled=True)
-        self.compel_2 = Compel(tokenizer=pipe.tokenizer_2, text_encoder=pipe.text_encoder_2)
-
-    def __call__(self, prompt: Union[str, List[str]]):
-        _, pooled_embeds = self.compel_1(prompt)
-        embeds = self.compel_2(prompt)
-        return CompelEmbeddings(pooled_embeds=pooled_embeds, embeds=embeds)
+from compel import CompelForFlux
 
 device = "mps"
 pipe = FluxPipeline.from_pretrained("black-forest-labs/FLUX.1-schnell", torch_dtype=torch.bfloat16)
@@ -32,6 +19,7 @@ print(f"encoding prompt '{prompt}'...")
 compel = CompelForFlux(pipe)
 conditioning = compel(prompt)
 print(conditioning.pooled_embeds.shape, conditioning.embeds.shape)
+
 
 generator = torch.Generator().manual_seed(42)
 images = pipe(prompt_embeds=conditioning.embeds, pooled_prompt_embeds=conditioning.pooled_embeds,
