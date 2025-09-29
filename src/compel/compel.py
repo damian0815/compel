@@ -65,7 +65,7 @@ class Compel:
         elif not isinstance(tokenizer, (tuple, list)) and isinstance(text_encoder, (tuple, list)):
             raise ValueError("Cannot provide list of text encoders, but not of tokenizers.")
         elif isinstance(tokenizer, (tuple, list)) and isinstance(text_encoder, (tuple, list)):
-            print("Deprecation warning: passing multiple tokenizers/text encoders to Compel is deprecated and will be removed in v3.0 Use one of the CompelFor* classes in multi_model_wrappers instead")
+            print("Deprecation warning: passing multiple tokenizers/text encoders to Compel is deprecated and will be removed in v3.0. Use one of the CompelFor* classes in multi_model_wrappers instead")
             self.conditioning_provider = EmbeddingsProviderMulti(tokenizers=tokenizer,
                                                             text_encoders=text_encoder,
                                                             textual_inversion_manager=textual_inversion_manager,

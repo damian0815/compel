@@ -126,6 +126,11 @@ class EmbeddingsProvider:
         :return: A tensor of shape `[1, max_length, token_dim]` containing weighted embeddings where token_dim is 768 for SD1
                     and 1280 for SD2
         """
+        if self.returned_embeddings_type == ReturnedEmbeddingsType.POOLED:
+            # todo: weighting with pooled embeddings
+            texts_unfragmented = [" ".join(fragments) for fragments in text_batch]
+            return self.get_pooled_embeddings(texts_unfragmented, return_tokens=should_return_tokens, device=device)
+
         if len(text_batch) != len(fragment_weights_batch):
             raise ValueError(
                 f"lengths of text and fragment_weights lists are not the same "+
@@ -267,15 +272,23 @@ class EmbeddingsProvider:
 
         return result
 
-    def get_pooled_embeddings(self, texts: List[str], attention_mask: Optional[torch.Tensor]=None, device: Optional[str]=None) -> Optional[torch.Tensor]:
-        
+    def get_pooled_embeddings(
+            self, texts: List[str],
+            attention_mask: Optional[torch.Tensor]=None,
+            device: Optional[str]=None,
+            return_tokens: bool=False
+    ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         device = device or self.device
 
         token_ids = self.get_token_ids(texts, padding="max_length", truncation_override=True)
         token_ids = torch.tensor(token_ids, dtype=torch.long).to(device)
 
         text_encoder_output = self.text_encoder(token_ids, attention_mask, return_dict=True)
-        return _get_pooled_output_from_text_encoder_output(text_encoder_output)
+        pooled_embeds = _get_pooled_output_from_text_encoder_output(text_encoder_output)
+        if return_tokens:
+            return pooled_embeds, token_ids
+        else:
+            return pooled_embeds
 
 
     def get_token_ids_and_expand_weights(self, fragments: List[str], weights: List[float], device: str

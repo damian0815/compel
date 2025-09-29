@@ -26,17 +26,14 @@ class CompelForFlux:
 
 class CompelForSDXL:
     def __init__(self, pipe: StableDiffusionXLPipeline):
-        self.compel_left = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder, returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED)
-        self.compel_right = Compel(tokenizer=pipe.tokenizer_2, text_encoder=pipe.text_encoder_2, returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED)
-        self.compel_pooled = Compel(tokenizer=pipe.tokenizer_2, text_encoder=pipe.text_encoder_2, returned_embeddings_type=ReturnedEmbeddingsType.POOLED)
+        self.compel_1 = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder, returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED)
+        self.compel_2 = Compel(tokenizer=pipe.tokenizer_2, text_encoder=pipe.text_encoder_2, returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED, requires_pooled=True)
 
     def __call__(self, prompt: Union[str, List[str]]):
-        embeds_left = self.compel_left(prompt)
-        embeds_right = self.compel_right(prompt)
+        embeds_left = self.compel_1(prompt)
+        embeds_right, pooled_embeds = self.compel_2(prompt)
         assert len(embeds_left.shape) == 3
         assert embeds_left.shape[0] == embeds_right.shape[0]
         # cat together along the embedding dimension
         embeds = torch.cat([embeds_left, embeds_right], dim=-1)
-
-        pooled_embeds = self.compel_pooled(prompt)
         return MultiEmbeddings(pooled_embeds=pooled_embeds, embeds=embeds)
