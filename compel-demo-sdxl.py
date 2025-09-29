@@ -1,4 +1,6 @@
 import torch
+from numpy.ma.core import negative
+
 from compel import Compel, ReturnedEmbeddingsType, CompelForSDXL
 from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler, StableDiffusionXLPipeline
 from torch import Generator
@@ -20,11 +22,13 @@ compel = Compel(tokenizer=[pipeline.tokenizer, pipeline.tokenizer_2] ,
                 requires_pooled=[False, True])
 
 prompt_embeds, pooled_prompt_embeds = compel(prompts)
+# target: 2, 77, 2048; 2, 1280
+# current: 154, 768; 154, 1280
 
 generator = torch.Generator().manual_seed(42)
 image = pipeline(prompt_embeds=prompt_embeds[0:1], pooled_prompt_embeds=pooled_prompt_embeds[0:1],
                  negative_prompt_embeds=prompt_embeds[1:2], negative_pooled_prompt_embeds=pooled_prompt_embeds[1:2],
-             num_inference_steps=4, width=512, height=512, generator=generator).images[0]
+             num_inference_steps=10, width=1024, height=1024, generator=generator).images[0]
 image.save('sdxl_old_method.jpg')
 
 
@@ -35,7 +39,6 @@ conditioning = compel(prompts)
 generator = torch.Generator().manual_seed(42)
 image = pipeline(prompt_embeds=conditioning.embeds[0:1], pooled_prompt_embeds=conditioning.pooled_embeds[0:1],
                  negative_prompt_embeds=conditioning.embeds[1:2], negative_pooled_prompt_embeds=conditioning.pooled_embeds[1:2],
-             num_inference_steps=4, width=512, height=512, generator=generator).images[0]
+             num_inference_steps=10, width=1024, height=1024, generator=generator).images[0]
 image.save('sdxl_new_method.jpg')
-
 

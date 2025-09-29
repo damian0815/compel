@@ -65,7 +65,7 @@ class Compel:
         elif not isinstance(tokenizer, (tuple, list)) and isinstance(text_encoder, (tuple, list)):
             raise ValueError("Cannot provide list of text encoders, but not of tokenizers.")
         elif isinstance(tokenizer, (tuple, list)) and isinstance(text_encoder, (tuple, list)):
-            print("Deprecation warning: passing multiple tokenizers/text encoders to Compel is deprecated and will be removed in v3.0 Use one of the CompelFor_ classes in multi_model_wrappers instead")
+            print("Deprecation warning: passing multiple tokenizers/text encoders to Compel is deprecated and will be removed in v3.0 Use one of the CompelFor* classes in multi_model_wrappers instead")
             self.conditioning_provider = EmbeddingsProviderMulti(tokenizers=tokenizer,
                                                             text_encoders=text_encoder,
                                                             textual_inversion_manager=textual_inversion_manager,
@@ -119,7 +119,8 @@ class Compel:
 
         # drop options dict
         if self.requires_pooled:
-            return output[0], output[1]
+            pooled = self.conditioning_provider.get_pooled_embeddings([text], device=self.device)
+            return output[0], pooled
         else:
             return output[0]
 
@@ -200,25 +201,15 @@ class Compel:
                 [padded_empty_conditioning, _] = self.pad_conditioning_tensors_to_same_length([empty_conditioning, this_conditioning])
                 this_conditioning = padded_empty_conditioning + (this_conditioning - padded_empty_conditioning) * weight
             to_concat.append(this_conditioning)
-        def concat_conditioning_tensors(tensors: List[torch.Tensor]) -> torch.Tensor:
-            assert all(len(c.shape) == len(tensors[0].shape) for c in tensors)
-            if len(tensors[0].shape) == 2:
-                token_dim = 0
-            elif len(tensors[0].shape) == 3:
-                #print("huh. weird. please file a bug on the Compel github repo stating that \"build_conditioning_tensor_for_conjunction shape has length 3\". include your prompts and the code you use to invoke Compel.")
-                token_dim = 1
-            else:
-                assert False, f"unhandled conditioning shape length: {tensors[0].shape}"
-            return torch.concat(tensors, dim=token_dim)
-        if type(to_concat[0]) is list:
-            all_cond = []
-            all_pooled = []
-            for c in to_concat:
-                all_cond.append(c[0])
-                all_pooled.append(c[1])
-            return concat_conditioning_tensors(all_cond), concat_conditioning_tensors(all_pooled), options
+        assert all(len(c.shape) == len(to_concat[0].shape) for c in to_concat)
+        if len(to_concat[0].shape) == 2:
+            token_dim = 0
+        elif len(to_concat[0].shape) == 3:
+            #print("huh. weird. please file a bug on the Compel github repo stating that \"build_conditioning_tensor_for_conjunction shape has length 3\". include your prompts and the code you use to invoke Compel.")
+            token_dim = 1
         else:
-            return concat_conditioning_tensors(to_concat), options
+            assert False, f"unhandled conditioning shape length: {to_concat[0].shape}"
+        return torch.concat(to_concat, dim=token_dim), options
 
 
     def build_conditioning_tensor_for_prompt_object(self, prompt: Union[Blend, FlattenedPrompt],

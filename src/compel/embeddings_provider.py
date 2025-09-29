@@ -123,7 +123,7 @@ class EmbeddingsProvider:
         :param fragment_weights_batch: A list of weights, one for each entry in `fragments`.
         :param should_return_tokens: If True, return a tuple of (embeddings, tokens), otherwise just return embeddings.
         :param device: Where to put the constructed tensor(s)
-        :return: A tensor of shape `[1, 77, token_dim]` containing weighted embeddings where token_dim is 768 for SD1
+        :return: A tensor of shape `[1, max_length, token_dim]` containing weighted embeddings where token_dim is 768 for SD1
                     and 1280 for SD2
         """
         if len(text_batch) != len(fragment_weights_batch):
@@ -215,6 +215,10 @@ class EmbeddingsProvider:
             batch_tokens = tokens.unsqueeze(0) if batch_tokens is None else torch.cat([batch_tokens, tokens.unsqueeze(0)], dim=1)
 
         # should have shape (B, 77, 768)
+        assert (
+            (self.returned_embeddings_type == ReturnedEmbeddingsType.POOLED and len(batch_z.shape) == 2)
+            or (len(batch_z.shape) == 3)
+        )
         #print(f"assembled all tokens into tensor of shape {batch_z.shape}")
 
         if should_return_tokens:
@@ -271,7 +275,7 @@ class EmbeddingsProvider:
         token_ids = torch.tensor(token_ids, dtype=torch.long).to(device)
 
         text_encoder_output = self.text_encoder(token_ids, attention_mask, return_dict=True)
-        return _get_pooled_output_from_text_enoder_output(text_encoder_output)
+        return _get_pooled_output_from_text_encoder_output(text_encoder_output)
 
 
     def get_token_ids_and_expand_weights(self, fragments: List[str], weights: List[float], device: str
@@ -423,6 +427,7 @@ class EmbeddingsProvider:
         chunk_start_index = 0
         weighted_z = []
 
+        # break prompt that are longer than self.max_token_count into chunks that will fit through the text encoder
         chunk_size = self.max_token_count
         while chunk_start_index < token_ids.shape[0]:
             next_chunk_start_index = chunk_start_index+chunk_size
@@ -478,7 +483,7 @@ class EmbeddingsProvider:
             # already normalized
             return text_encoder_output.last_hidden_state
         elif self.returned_embeddings_type == ReturnedEmbeddingsType.POOLED:
-            return _get_pooled_output_from_text_enoder_output(text_encoder_output)
+            return _get_pooled_output_from_text_encoder_output(text_encoder_output)
         assert False, f"unrecognized ReturnEmbeddingsType: {self.returned_embeddings_type}"
 
     def _get_token_ranges_for_fragments(self, chunked_and_padded_token_ids: List[int], fragments: List[str]) -> List[Tuple[int, int]]:
@@ -557,6 +562,7 @@ class EmbeddingsProviderMulti:
                 returned_embeddings_type: Union[List[ReturnedEmbeddingsType], ReturnedEmbeddingsType] = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED,
                 requires_pooled_mask: List[bool] = None,
                 split_long_text_mode = SplitLongTextMode.SENTENCES,
+                concat_along_embedding_dim: bool = True,
                 ):
 
         if requires_pooled_mask is None:
@@ -568,6 +574,7 @@ class EmbeddingsProviderMulti:
             for tokenizer, text_encoder, returned_embeddings_type in zip(tokenizers, text_encoders, returned_embeddings_type)
         ]
         self.requires_pooled_mask = requires_pooled_mask
+        self.concat_along_embedding_dim = concat_along_embedding_dim
 
     @property
     def text_encoder(self):
@@ -603,21 +610,18 @@ class EmbeddingsProviderMulti:
 
         outputs = [provider.get_embeddings_for_weighted_prompt_fragments(text_batch, fragment_weights_batch, should_return_tokens=should_return_tokens, device=device) for provider in self.embedding_providers]
 
-        text_embeddings = []
-        tokens = []
-
-        for output in outputs:
-            text_embeddings.append(output[0])
-
-            if should_return_tokens:
-                tokens.append(output[1])
-
         if should_return_tokens:
+            text_embeddings = [o[0] for o in outputs]
+            if self.concat_along_embedding_dim:
+                text_embeddings = torch.cat(text_embeddings, dim=-1)
+            tokens = [o[1] for o in outputs]
             return text_embeddings, tokens
         else:
+            if self.concat_along_embedding_dim:
+                text_embeddings = torch.cat(outputs, dim=-1)
             return text_embeddings
 
-def _get_pooled_output_from_text_enoder_output(text_encoder_output):
+def _get_pooled_output_from_text_encoder_output(text_encoder_output):
     if hasattr(text_encoder_output, 'pooler_output'):
         return text_encoder_output.pooler_output
     elif hasattr(text_encoder_output, 'text_embeds'):
