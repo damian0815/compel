@@ -19,7 +19,7 @@ Documentation is [here](doc/).
 
 ### Demo
 
-See [compel-demo.ipynb](notebooks/compel-demo.ipynb)
+See [compel-demo.ipynb](compel-demo.ipynb)
 
 <a target="_blank" href="https://colab.research.google.com/github/damian0815/compel/blob/main/compel-demo.ipynb">
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
@@ -84,6 +84,8 @@ If this doesn't help, you could try this advice offered by @kshieh1:
 See https://github.com/damian0815/compel/issues/24 for more details. Thanks @kshieh1 !
 
 ## Changelog
+
+### 2.2.0 - Flux support; added `CompelForFlux` and `CompelForSDXL` classes. See compel-demo-flux.py/.ipynb and compel-demo-sdxl.py/.ipynb for usage.
 
 #### 2.1.1 - expose `split_long_text_mode` to top-level Compel, default to `SENTENCES`, fix bug where splitting would fail sometimes.
 
