@@ -9,15 +9,15 @@ Adapted from the [InvokeAI](https://github.com/invoke-ai) prompting code (also b
 
 Note that cross-attention control `.swap()` is currently ignored by Compel, but you can use it by calling `build_conditioning_tensor_for_prompt_object()` yourself, and implementing cross-attention control in your diffusion loop.
 
-### Installation
+## Installation
 
 `pip install compel`
 
-### Documentation
+## Documentation
 
 Documentation is [here](doc/).
 
-### Demo
+## Demo
 
 See [compel-demo.ipynb](compel-demo.ipynb)
 
@@ -25,7 +25,7 @@ See [compel-demo.ipynb](compel-demo.ipynb)
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
-### Quickstart
+## Quickstart
 
 with Hugging Face diffusers >=0.12:
 
@@ -45,6 +45,39 @@ conditioning = compel.build_conditioning_tensor(prompt)
 images = pipeline(prompt_embeds=conditioning, num_inference_steps=20).images
 images[0].save("image.jpg")
 ```
+
+### SDXL
+
+```python
+from diffusers import DiffusionPipeline
+from compel import CompelForSDXL
+import torch
+
+device = 'cuda'
+pipeline = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", variant="fp16", 
+                                             use_safetensors=True, torch_dtype=torch.float16).to(device)
+
+prompts = ["a cat playing with a ball++ in the forest", "low quality, blurry"]
+compel = CompelForSDXL(pipeline)
+conditioning = compel(prompts)
+
+generator = torch.Generator().manual_seed(42)
+image = pipeline(prompt_embeds=conditioning.embeds[0:1], 
+                 pooled_prompt_embeds=conditioning.pooled_embeds[0:1],
+                 negative_prompt_embeds=conditioning.embeds[1:2],
+                 negative_pooled_prompt_embeds=conditioning.pooled_embeds[1:2],
+                 num_inference_steps=25, width=1024, height=1024, generator=generator).images[0]
+image.save('sdxl_new_method.jpg')
+```
+
+### Flux
+
+```python
+
+
+
+```
+
 
 For batched input, use the __call__ interface to compel:
 

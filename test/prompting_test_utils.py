@@ -34,6 +34,7 @@ class DummyTransformer:
         self.embedding_length = embedding_length
         self.embeddings = DummyEmbeddingsList([make_dummy_embedding(self.embedding_length) for _ in range(len(KNOWN_WORDS)+3)])
         self.device = device
+        self.dtype=torch.float32
 
     def resize_token_embeddings(self, new_size=None):
         if new_size is None:

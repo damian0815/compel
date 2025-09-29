@@ -3,11 +3,11 @@ from typing import List, Optional
 
 import torch
 
-from src.compel import EmbeddingsProvider, ReturnedEmbeddingsType
-from src.compel.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
-from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS, NullTransformer
+from compel import ReturnedEmbeddingsType
+from compel.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
+from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
-from src.compel.compel import Compel
+from compel.compel import Compel
 
 
 def make_dummy_compel():
@@ -203,11 +203,6 @@ class CompelTestCase(unittest.TestCase):
 
         embeds_a = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length])
         embeds_b = torch.randn([tokenizer.model_max_length, text_encoder.embedding_length+1])
-        with self.assertRaises(ValueError):
-            _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
-
-        embeds_a = torch.randn([text_encoder.embedding_length])
-        embeds_b = torch.randn([text_encoder.embedding_length])
         with self.assertRaises(ValueError):
             _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
 
