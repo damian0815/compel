@@ -25,9 +25,15 @@ class CompelForFlux:
 
 
 class CompelForSDXL:
-    def __init__(self, pipe: StableDiffusionXLPipeline):
-        self.compel_1 = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder, returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED)
-        self.compel_2 = Compel(tokenizer=pipe.tokenizer_2, text_encoder=pipe.text_encoder_2, returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED, requires_pooled=True)
+    def __init__(self, pipe: StableDiffusionXLPipeline, truncate_long_prompts: bool = False):
+        self.compel_1 = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder,
+                               returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
+                               truncate_long_prompts=truncate_long_prompts
+                               )
+        self.compel_2 = Compel(tokenizer=pipe.tokenizer_2, text_encoder=pipe.text_encoder_2,
+                               returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
+                               requires_pooled=True, truncate_long_prompts=truncate_long_prompts
+                               )
 
     def __call__(self, prompt: Union[str, List[str]]):
         embeds_left = self.compel_1(prompt)

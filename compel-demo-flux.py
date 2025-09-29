@@ -11,18 +11,37 @@ import torch
 
 from compel import CompelForFlux
 
-device = "mps"
-pipe = FluxPipeline.from_pretrained("black-forest-labs/FLUX.1-schnell", torch_dtype=torch.bfloat16)
+with torch.no_grad():
+    device = "cpu"
+    pipe = FluxPipeline.from_pretrained("black-forest-labs/FLUX.1-schnell", torch_dtype=torch.bfloat16).to(device)
+    compel = CompelForFlux(pipe)
 
-prompt = "Astronaut---- in a jungle++++, cold color palette, muted colors, detailed, 8k"
-print(f"encoding prompt '{prompt}'...")
-compel = CompelForFlux(pipe)
-conditioning = compel(prompt)
-print(conditioning.pooled_embeds.shape, conditioning.embeds.shape)
+    prompt = "Astronaut in a jungle, cold color palette, muted colors, detailed, 8k"
+    prompt_weighted = "Astronaut---- in a jungle++++, cold color palette, muted colors, detailed, 8k"
+
+    print(f"generating baseline images for '{prompt}' without compel...")
+    generator = torch.Generator().manual_seed(42)
+    images = pipe(prompt=prompt, num_inference_steps=4, width=512, height=512, generator=generator)
+    print("generated, saving...")
+    images[0][0].save('flux_baseline.jpg')
 
 
-generator = torch.Generator().manual_seed(42)
-images = pipe(prompt_embeds=conditioning.embeds, pooled_prompt_embeds=conditioning.pooled_embeds,
-             num_inference_steps=4, width=512, height=512, generator=generator)
+    print(f"encoding plain prompt '{prompt}' with compel...")
+    conditioning = compel(prompt)
+    print("generating with plain compel embeddings...")
+    generator = torch.Generator().manual_seed(42)
+    images = pipe(prompt_embeds=conditioning.embeds, pooled_prompt_embeds=conditioning.pooled_embeds,
+                  num_inference_steps=4, width=512, height=512, generator=generator)
+    print("generated, saving...")
+    images[0][0].save('flux_compel_plain.jpg')
 
-images[0][0].save('img0.jpg')
+
+    print(f"encoding weighted prompt '{prompt_weighted}' with compel...")
+    conditioning_weighted = compel(prompt_weighted)
+    print("generating with weighted compel embeddings...")
+    generator = torch.Generator().manual_seed(42)
+    images = pipe(prompt_embeds=conditioning_weighted.embeds, pooled_prompt_embeds=conditioning_weighted.pooled_embeds,
+                 num_inference_steps=4, width=512, height=512, generator=generator)
+    print("generated, saving...")
+    images[0][0].save('flux_compel_weighted.jpg')
+
