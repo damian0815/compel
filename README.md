@@ -184,7 +184,7 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 * Flux is now supported
 * Added `CompelForSD`, `CompelForFlux` and `CompelForSDXL` to simplify and streamline embeds vs pooled_embeds, negative prompts, and style prompts handling. See compel-demo-*.py/.ipynb for usage examples.
-* Performance improvements when working with non-weighted prompts. If a prompt is passed with no weighting, the weighting logic is completely bypassed. **This may slightly change the outputs when no weighting is applied** - revert to the old behaviour by calling `compel.disable_no_weight_bypass()`.
+* Performance improvements when working with non-weighted prompts. If a prompt is passed with no weighting, the weighting logic is completely bypassed. **This may slightly change the outputs when no weighting is applied** - revert to the old slower behaviour by calling `compel.disable_no_weights_bypass()`.
 * When working with `CompelForSD` and `CompelForSDXL` classes, non-truncation is now the default.
 
 #### 2.1.1 - expose `split_long_text_mode` to top-level Compel, default to `SENTENCES`, fix bug where splitting would fail sometimes.

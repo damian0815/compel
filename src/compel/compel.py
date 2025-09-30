@@ -124,6 +124,8 @@ class Compel:
         else:
             return output[0]
 
+    def disable_no_weights_bypass(self):
+        self.conditioning_provider.disable_no_weights_bypass()
 
     @torch.no_grad()
     def __call__(self, text: Union[str, List[str]]) -> torch.FloatTensor:

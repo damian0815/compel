@@ -74,6 +74,10 @@ class EmbeddingsProvider:
         self.get_dtype_for_device = dtype_for_device_getter
 
         self._empty_z = None
+        self.bypass_when_no_weights = True
+
+    def disable_no_weights_bypass(self):
+        self.bypass_when_no_weights = False
 
     @property
     def empty_z(self):
@@ -461,7 +465,7 @@ class EmbeddingsProvider:
                     chunk_per_token_weights.shape + (1,)
                 ).expand(z.shape).to(z.device)
 
-                identity_mask = batch_weights_expanded == 1
+                identity_mask = batch_weights_expanded == 1 if self.bypass_when_no_weights else torch.zeros_like(batch_weights_expanded).bool()
                 if torch.all(identity_mask):
                     # no weighting
                     this_weighted_z = z
@@ -596,6 +600,10 @@ class EmbeddingsProviderMulti:
     @property
     def tokenizer(self):
         return self.embedding_providers[0].tokenizer
+
+    def disable_no_weights_bypass(self):
+        for ep in self.embedding_providers:
+            ep.disable_no_weights_bypass()
 
     def get_token_ids(self, *args, **kwargs):
         # get token ids does not use padding. The padding ID is the only ID that can differ between tokenizers
