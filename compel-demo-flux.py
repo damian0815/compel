@@ -12,8 +12,8 @@ import torch
 from compel import CompelForFlux
 
 with torch.no_grad():
-    device = "cpu"
-    pipe = FluxPipeline.from_pretrained("black-forest-labs/FLUX.1-schnell", torch_dtype=torch.bfloat16).to(device)
+    device = "mps"
+    pipe = FluxPipeline.from_pretrained("black-forest-labs/FLUX.1-schnell", torch_dtype=torch.float32).to(device) # bfloat16 causes NaN on MPS
     compel = CompelForFlux(pipe)
 
     prompt = "Astronaut in a jungle, cold color palette, muted colors, detailed, 8k"
