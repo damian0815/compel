@@ -18,9 +18,11 @@ class CompelForFlux:
         self.compel_1 = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder, returned_embeddings_type=ReturnedEmbeddingsType.POOLED)
         self.compel_2 = Compel(tokenizer=pipe.tokenizer_2, text_encoder=pipe.text_encoder_2)
 
-    def __call__(self, prompt: Union[str, List[str]]):
-        pooled_embeds = self.compel_1(prompt)
-        embeds = self.compel_2(prompt)
+    def __call__(self, main_prompt: Union[str, List[str]], style_prompt: Union[None, str, List[str]] = None):
+        if style_prompt is None:
+            style_prompt = main_prompt
+        pooled_embeds = self.compel_1(style_prompt)
+        embeds = self.compel_2(main_prompt)
         return MultiEmbeddings(pooled_embeds=pooled_embeds, embeds=embeds)
 
 
@@ -35,9 +37,11 @@ class CompelForSDXL:
                                requires_pooled=True, truncate_long_prompts=truncate_long_prompts
                                )
 
-    def __call__(self, prompt: Union[str, List[str]]):
-        embeds_left = self.compel_1(prompt)
-        embeds_right, pooled_embeds = self.compel_2(prompt)
+    def __call__(self, main_prompt: Union[str, List[str]], style_prompt: Union[None, str, List[str]] = None):
+        if style_prompt is None:
+            style_prompt = main_prompt
+        embeds_left = self.compel_1(main_prompt)
+        embeds_right, pooled_embeds = self.compel_2(style_prompt)
         assert len(embeds_left.shape) == 3
         assert embeds_left.shape[0] == embeds_right.shape[0]
         # cat together along the embedding dimension
