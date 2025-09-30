@@ -1,6 +1,6 @@
 [project]
 name = "compel"
-version = "2.1.1"
+version = "2.2.0"
 authors = [
   { name="Damian Stewart", email="null@damianstewart.com" },
 ]
@@ -14,9 +14,10 @@ classifiers = [
 ]
 dependencies = [
     "diffusers >= 0.11",
+    "notebook>=6.5.7",
     "pyparsing ~= 3.0",
     "torch",
-    "transformers ~= 4.25"
+    "transformers ~= 4.25",
 ]
 
 [project.urls]

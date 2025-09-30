@@ -1,13 +1,14 @@
 import unittest
+from unittest.mock import MagicMock
 from typing import List, Optional
 
 import torch
 
-from src.compel import EmbeddingsProvider, ReturnedEmbeddingsType
-from src.compel.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
-from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS, NullTransformer
+from compel import ReturnedEmbeddingsType
+from compel.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
+from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
-from src.compel.compel import Compel
+from compel.compel import Compel
 
 
 def make_dummy_compel():
@@ -206,11 +207,6 @@ class CompelTestCase(unittest.TestCase):
         with self.assertRaises(ValueError):
             _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
 
-        embeds_a = torch.randn([text_encoder.embedding_length])
-        embeds_b = torch.randn([text_encoder.embedding_length])
-        with self.assertRaises(ValueError):
-            _ = compel.pad_conditioning_tensors_to_same_length([embeds_a, embeds_b])
-
         embeds_a = torch.randn([1, tokenizer.model_max_length, text_encoder.embedding_length])
         embeds_b = torch.randn([text_encoder.embedding_length])
         with self.assertRaises(ValueError):
@@ -313,6 +309,83 @@ class CompelTestCase(unittest.TestCase):
         text = "a b gone</w> a b .</w> gone</w> home</w> a .</w>"
         # should not raise any exceptions
         _ = compel(text)
+
+    def test_sdxl_wrapper(self):
+        from compel.convenience_wrappers import CompelForSDXL
+        max_length = 5
+        pipeline = MagicMock()
+        pipeline.tokenizer = DummyTokenizer(model_max_length=max_length)
+        pipeline.tokenizer_2 = DummyTokenizer(model_max_length=max_length)
+        pipeline.text_encoder = DummyTransformer(text_model_max_length=max_length, embedding_length=1280)
+        pipeline.text_encoder_2 = DummyTransformer(text_model_max_length=max_length, embedding_length=768)
+        compel = CompelForSDXL(pipeline)
+
+        prompt_short = "a b c"
+        prompt_long = "a b c a b c a b"
+        conditioning = compel(prompt_short, style_prompt=prompt_long)
+        self.assertIsNotNone(conditioning.embeds)
+        self.assertIsNotNone(conditioning.pooled_embeds)
+        self.assertIsNone(conditioning.negative_embeds)
+        self.assertIsNone(conditioning.negative_pooled_embeds)
+        self.assertEqual(conditioning.embeds.shape[0], conditioning.pooled_embeds.shape[0])
+        self.assertEqual(conditioning.embeds.shape, (1, 15, 2048))
+        self.assertEqual(conditioning.pooled_embeds.shape, (1, 768))
+
+        conditioning = compel(prompt_long, style_prompt=prompt_short)
+        self.assertIsNotNone(conditioning.embeds)
+        self.assertIsNotNone(conditioning.pooled_embeds)
+        self.assertIsNone(conditioning.negative_embeds)
+        self.assertIsNone(conditioning.negative_pooled_embeds)
+        self.assertEqual(conditioning.embeds.shape[0], conditioning.pooled_embeds.shape[0])
+        self.assertEqual(conditioning.embeds.shape, (1, 15, 2048))
+        self.assertEqual(conditioning.pooled_embeds.shape, (1, 768))
+
+
+        conditioning = compel(prompt_long, style_prompt=prompt_short, negative_prompt=prompt_short, negative_style_prompt=prompt_long)
+        self.assertIsNotNone(conditioning.embeds)
+        self.assertIsNotNone(conditioning.pooled_embeds)
+        self.assertIsNotNone(conditioning.negative_embeds)
+        self.assertIsNotNone(conditioning.negative_pooled_embeds)
+        self.assertEqual(conditioning.embeds.shape[0], conditioning.pooled_embeds.shape[0])
+        self.assertEqual(conditioning.embeds.shape, (1, 15, 2048))
+        self.assertEqual(conditioning.pooled_embeds.shape, (1, 768))
+        self.assertEqual(conditioning.negative_embeds.shape, (1, 15, 2048))
+        self.assertEqual(conditioning.negative_pooled_embeds.shape, (1, 768))
+
+        conditioning = compel(prompt_short, style_prompt=prompt_short, negative_prompt=prompt_long, negative_style_prompt=prompt_long)
+        self.assertIsNotNone(conditioning.embeds)
+        self.assertIsNotNone(conditioning.pooled_embeds)
+        self.assertIsNotNone(conditioning.negative_embeds)
+        self.assertIsNotNone(conditioning.negative_pooled_embeds)
+        self.assertEqual(conditioning.embeds.shape[0], conditioning.pooled_embeds.shape[0])
+        self.assertEqual(conditioning.embeds.shape, (1, 15, 2048))
+        self.assertEqual(conditioning.pooled_embeds.shape, (1, 768))
+        self.assertEqual(conditioning.negative_embeds.shape, (1, 15, 2048))
+        self.assertEqual(conditioning.negative_pooled_embeds.shape, (1, 768))
+
+        conditioning = compel(prompt_short, style_prompt=prompt_short, negative_prompt=prompt_short, negative_style_prompt=prompt_long)
+        self.assertIsNotNone(conditioning.embeds)
+        self.assertIsNotNone(conditioning.pooled_embeds)
+        self.assertIsNotNone(conditioning.negative_embeds)
+        self.assertIsNotNone(conditioning.negative_pooled_embeds)
+        self.assertEqual(conditioning.embeds.shape[0], conditioning.pooled_embeds.shape[0])
+        self.assertEqual(conditioning.embeds.shape, (1, 15, 2048))
+        self.assertEqual(conditioning.pooled_embeds.shape, (1, 768))
+        self.assertEqual(conditioning.negative_embeds.shape, (1, 15, 2048))
+        self.assertEqual(conditioning.negative_pooled_embeds.shape, (1, 768))
+
+        conditioning = compel([prompt_short, prompt_long],
+                              style_prompt=[prompt_short, prompt_long],
+                              negative_prompt=prompt_short, negative_style_prompt=prompt_long)
+        self.assertIsNotNone(conditioning.embeds)
+        self.assertIsNotNone(conditioning.pooled_embeds)
+        self.assertIsNotNone(conditioning.negative_embeds)
+        self.assertIsNotNone(conditioning.negative_pooled_embeds)
+        self.assertEqual(conditioning.embeds.shape[0], conditioning.pooled_embeds.shape[0])
+        self.assertEqual(conditioning.embeds.shape, (2, 15, 2048))
+        self.assertEqual(conditioning.pooled_embeds.shape, (2, 768))
+        self.assertEqual(conditioning.negative_embeds.shape, (2, 15, 2048))
+        self.assertEqual(conditioning.negative_pooled_embeds.shape, (2, 768))
 
 
 if __name__ == '__main__':

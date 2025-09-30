@@ -9,15 +9,15 @@ Adapted from the [InvokeAI](https://github.com/invoke-ai) prompting code (also b
 
 Note that cross-attention control `.swap()` is currently ignored by Compel, but you can use it by calling `build_conditioning_tensor_for_prompt_object()` yourself, and implementing cross-attention control in your diffusion loop.
 
-### Installation
+## Installation
 
 `pip install compel`
 
-### Documentation
+## Documentation
 
 Documentation is [here](doc/).
 
-### Demo
+## Demo
 
 See [compel-demo.ipynb](compel-demo.ipynb)
 
@@ -25,53 +25,148 @@ See [compel-demo.ipynb](compel-demo.ipynb)
   <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
 </a>
 
-### Quickstart
+## Quickstart
 
-with Hugging Face diffusers >=0.12:
+With Hugging Face diffusers >=0.12:
 
 ```python
 from diffusers import StableDiffusionPipeline
-from compel import Compel
+from compel import CompelForSD
 
 pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
-compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
+compel = CompelForSD(pipeline)
 
 # upweight "ball"
 prompt = "a cat playing with a ball++ in the forest"
-conditioning = compel.build_conditioning_tensor(prompt)
-# or: conditioning = compel([prompt])
+conditioning = compel(prompt)
 
 # generate image
-images = pipeline(prompt_embeds=conditioning, num_inference_steps=20).images
+images = pipeline(prompt_embeds=conditioning.embeds, num_inference_steps=20).images
 images[0].save("image.jpg")
 ```
 
-For batched input, use the __call__ interface to compel:
+#### With negative prompt:
 
 ```python
 from diffusers import StableDiffusionPipeline
-from compel import Compel
+from compel import CompelForSD
 
 pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
-compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
+compel = CompelForSD(pipeline)
 
-prompts = ["a cat playing with a ball++ in the forest", "a dog playing with a ball in the forest"]
-prompt_embeds = compel(prompts)
-images = pipeline(prompt_embeds=prompt_embeds).images
+# upweight "ball"
+prompt = "a cat playing with a ball++ in the forest"
+negative_prompt = "blurry, low quality, deformed"
+conditioning = compel(prompt, negative_prompt=negative_prompt)
 
-images[0].save("image0.jpg")
-images[1].save("image1.jpg")
+# generate image
+images = pipeline(prompt_embeds=conditioning.embeds, negative_prompt_embed=conditioning.negative_embeds, num_inference_steps=20).images
+images[0].save("image.jpg")
 ```
 
-### Textual Inversion support
+#### Batched:
+
+```python
+from diffusers import StableDiffusionPipeline
+from compel import CompelForSD
+
+pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
+compel = CompelForSD(pipeline)
+
+prompt = ["a cat playing with a ball++ in the forest", "a dog wearing a hat++"]
+negative_prompt = ["blurry, low quality, deformed", "painting"] 
+# or: negative_prompt = "blurry, low quality, deformed" # shared across all generated images
+conditioning = compel(prompt, negative_prompt=negative_prompt)
+
+# generate image
+images = pipeline(prompt_embeds=conditioning.embeds, negative_prompt_embed=conditioning.negative_embeds, num_inference_steps=20).images
+images[0].save("image.jpg")
+```
+
+### SDXL:
+
+```python
+from diffusers import DiffusionPipeline
+from compel import CompelForSDXL
+import torch
+
+device = 'cuda'
+pipeline = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", variant="fp16", 
+                                             use_safetensors=True, torch_dtype=torch.float16).to(device)
+
+prompt = "a cat playing with a ball++ in the forest"
+negative_prompt = "low quality, blurry"
+compel = CompelForSDXL(pipeline)
+conditioning = compel(prompt, negative_prompt=negative_prompt)
+
+generator = torch.Generator().manual_seed(42)
+image = pipeline(prompt_embeds=conditioning.embeds, 
+                 pooled_prompt_embeds=conditioning.pooled_embeds,
+                 negative_prompt_embeds=conditioning.negative_embeds,
+                 negative_pooled_prompt_embeds=conditioning.negative_pooled_embeds,
+                 num_inference_steps=25, width=1024, height=1024, generator=generator).images[0]
+image.save('sdxl_image.jpg')
+```
+
+### Flux
+
+```python
+from diffusers import FluxPipeline
+from compel import CompelForFlux
+import torch
+
+device = "mps"
+pipe = FluxPipeline.from_pretrained("black-forest-labs/FLUX.1-schnell", torch_dtype=torch.float32).to(device) # bfloat16 causes NaN on MPS
+compel = CompelForFlux(pipe)
+
+prompt = "Astronaut---- in a jungle++++, cold color palette, muted colors, detailed, 8k"
+
+conditioning = compel(prompt)
+generator = torch.Generator().manual_seed(42)
+images = pipe(prompt_embeds=conditioning.embeds, pooled_prompt_embeds=conditioning.pooled_embeds,
+             num_inference_steps=4, width=512, height=512, generator=generator)
+```
+
+### Style prompt
+
+Works with SDXL or Flux:
+
+```python
+from diffusers import DiffusionPipeline
+from compel import CompelForSDXL
+import torch
+
+device = 'cuda'
+pipeline = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", variant="fp16", 
+                                             use_safetensors=True, torch_dtype=torch.float16).to(device)
+
+prompt = "a cat playing with a ball++ in the forest"
+style_prompt = "painting by van gogh, impasto, thick brush strokes"
+negative_prompt = "low quality, blurry"
+negative_style_prompt = "photography"
+compel = CompelForSDXL(pipeline) # or CompelForFlux(pipe)
+conditioning = compel(prompt=prompt, negative_prompt=negative_prompt, 
+                      style_prompt=style_prompt, negative_style_prompt=negative_style_prompt)
+
+generator = torch.Generator().manual_seed(42)
+image = pipeline(prompt_embeds=conditioning.embeds, 
+                 pooled_prompt_embeds=conditioning.pooled_embeds,
+                 negative_prompt_embeds=conditioning.negative_embeds,
+                 negative_pooled_prompt_embeds=conditioning.negative_pooled_embeds,
+                 num_inference_steps=25, width=1024, height=1024, generator=generator).images[0]
+image.save('sdxl_image.jpg')
+```
+
+## Textual Inversion support
 
 If you want to have access to 🤗diffusers textual inversions, instantiate a `DiffusersTextualInversionManager` and pass it on Compel init:
 
-```
+```python
+from diffusers import StableDiffusionPipeline
+from compel import CompelForSD, DiffusersTextualInversionManager
 pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1-5")
 textual_inversion_manager = DiffusersTextualInversionManager(pipeline)
-compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder, 
-    textual_inversion_manager=textual_inversion_manager)
+compel = CompelForSD(pipe=pipeline, textual_inversion_manager=textual_inversion_manager)
 ```
 
 ## Memory usage/VRAM leaks
@@ -84,6 +179,13 @@ If this doesn't help, you could try this advice offered by @kshieh1:
 See https://github.com/damian0815/compel/issues/24 for more details. Thanks @kshieh1 !
 
 ## Changelog
+
+### 2.2.0 - Flux support, usability improvement
+
+* Flux is now supported
+* Added `CompelForSD`, `CompelForFlux` and `CompelForSDXL` to simplify and streamline embeds vs pooled_embeds, negative prompts, and style prompts handling. See compel-demo-*.py/.ipynb for usage examples.
+* Performance improvements when working with non-weighted prompts. If a prompt is passed with no weighting, the weighting logic is completely bypassed. **This may slightly change the outputs when no weighting is applied** - revert to the old slower behaviour by calling `compel.disable_no_weights_bypass()`.
+* When working with `CompelForSD` and `CompelForSDXL` classes, non-truncation is now the default.
 
 #### 2.1.1 - expose `split_long_text_mode` to top-level Compel, default to `SENTENCES`, fix bug where splitting would fail sometimes.
 

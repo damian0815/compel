@@ -1,5 +1,7 @@
 import torch
-from compel import Compel, ReturnedEmbeddingsType
+from numpy.ma.core import negative
+
+from compel import Compel, ReturnedEmbeddingsType, CompelForSD
 from diffusers import StableDiffusionPipeline, DPMSolverMultistepScheduler
 from torch import Generator
 
@@ -13,12 +15,18 @@ prompts = ["a cat playing with a ball++ in the forest", "a cat playing with a ba
 
 compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
 prompt = "a cat playing with a ball++ in the forest"
-conditioning, pooled = compel(prompt)
-print(conditioning.shape, pooled.shape)
-
 prompt_embeds = compel(prompts)
-images = pipeline(prompt_embeds=prompt_embeds, num_inference_steps=10, width=256, height=256).images
-print(images)
+#images = pipeline(prompt_embeds=prompt_embeds, num_inference_steps=25, width=512, height=512).images
+#print(images)
 
-images[0].save('/tmp/img0.jpg')
-images[1].save('/tmp/img1.jpg')
+#images[0].save('sd-img0.jpg')
+#images[1].save('sd-img1.jpg')
+
+# new method using CompelForSD
+compel = CompelForSD(pipeline)
+conditioning = compel(prompts, negative_prompt="badly drawn")
+generator = torch.Generator().manual_seed(42)
+images = pipeline(prompt_embeds=conditioning.embeds, negative_prompt_embeds=conditioning.negative_embeds,
+                 num_inference_steps=25, width=512, height=512, generator=generator).images
+images[0].save('sd-img0_w_neg.jpg')
+images[1].save('sd-img1_w_neg.jpg')
