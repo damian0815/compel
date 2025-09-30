@@ -25,8 +25,13 @@ class CompelForSD:
         self.compel.disable_no_weights_bypass()
 
     def __call__(self, prompt: Union[str, List[str]], negative_prompt: Union[None, str, List[str]] = None):
+        if type(prompt) is str:
+            prompt = [prompt]
+        if type(negative_prompt) is str:
+            negative_prompt = [negative_prompt]
         input, negative_start_index = _make_compel_input_with_optional_negative(prompt, negative_prompt)
         embeds = self.compel(input)
+        embeds = _duplicate_negative_conditioning_if_required(embeds, negative_start_index)
         return LabelledConditioning(embeds=embeds[0:negative_start_index],
                                     pooled_embeds=None,
                                     negative_embeds=None if negative_start_index is None else embeds[negative_start_index:],
@@ -50,12 +55,20 @@ class CompelForFlux:
     def __call__(self,
                  main_prompt: Union[str, List[str]], style_prompt: Union[None, str, List[str]] = None,
                  negative_prompt: Union[None, str, List[str]] = None, negative_style_prompt: Union[None, str, List[str]] = None):
+        if type(main_prompt) is str:
+            main_prompt = [main_prompt]
+        if type(negative_prompt) is str:
+            negative_prompt = [negative_prompt]
         if style_prompt is None:
             style_prompt = main_prompt
         main_input, negative_main_start_index = _make_compel_input_with_optional_negative(main_prompt, negative_prompt)
         style_input, negative_style_start_index = _make_compel_input_with_optional_negative(style_prompt, negative_style_prompt)
         pooled_embeds = self.compel_1(style_input)
         embeds = self.compel_2(main_input)
+
+        embeds = _duplicate_negative_conditioning_if_required(embeds, negative_main_start_index)
+        pooled_embeds = _duplicate_negative_conditioning_if_required(pooled_embeds, negative_style_start_index)
+
         return LabelledConditioning(embeds=embeds[0:negative_main_start_index],
                                     pooled_embeds=pooled_embeds[0:negative_style_start_index],
                                     negative_embeds=None if negative_main_start_index is None else embeds[negative_main_start_index:],
@@ -128,14 +141,9 @@ class CompelForSDXL:
         # 2. now cat along the embedding dimension
         embeds = torch.cat([embeds_left, embeds_right], dim=-1)
 
-        if negative_main_start_index is not None and embeds.shape[0] - negative_main_start_index == 1:
-            # need to repeat negatives
-            num_repeats = negative_main_start_index
-            embeds = torch.cat([embeds[0:negative_main_start_index], embeds[negative_main_start_index:].repeat(num_repeats, 1, 1)])
-        if negative_style_start_index is not None and pooled_embeds.shape[0] - negative_style_start_index == 1:
-            # need to repeat negatives
-            num_repeats = negative_style_start_index
-            pooled_embeds = torch.cat([pooled_embeds[0:negative_style_start_index], pooled_embeds[negative_style_start_index:].repeat(num_repeats, 1)])
+        # 3. duplicate negatives if needed to match the number of positives
+        embeds = _duplicate_negative_conditioning_if_required(embeds, negative_main_start_index)
+        pooled_embeds = _duplicate_negative_conditioning_if_required(pooled_embeds, negative_style_start_index)
 
         return LabelledConditioning(embeds=embeds[0:negative_main_start_index],
                                     pooled_embeds=pooled_embeds[0:negative_style_start_index],
@@ -154,3 +162,15 @@ def _make_compel_input_with_optional_negative(positive_prompt: list[str], negati
     main_input = positive_prompt + negative_prompt
     negative_main_start_index = len(positive_prompt)
     return main_input, negative_main_start_index
+
+def _duplicate_negative_conditioning_if_required(embeds: torch.Tensor, negative_start_index: Optional[int]):
+    if negative_start_index is None:
+        return embeds
+    elif embeds.shape[0] - negative_start_index == 1:
+        # need to repeat negatives
+        num_repeats = negative_start_index
+        embeds = torch.cat([embeds[0:negative_start_index], embeds[negative_start_index:].repeat(num_repeats, 1, 1)])
+        return embeds
+    elif embeds.shape[0] != negative_start_index*2:
+        raise RuntimeError("something went wrong, unexpected number of negative embeddings")
+    return embeds
