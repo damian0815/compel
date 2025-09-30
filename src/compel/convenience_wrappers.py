@@ -168,8 +168,9 @@ def _duplicate_negative_conditioning_if_required(embeds: torch.Tensor, negative_
         return embeds
     elif embeds.shape[0] - negative_start_index == 1:
         # need to repeat negatives
-        num_repeats = negative_start_index
-        embeds = torch.cat([embeds[0:negative_start_index], embeds[negative_start_index:].repeat(num_repeats, 1, 1)])
+        num_dim0_repeats = negative_start_index
+        num_repeats = [num_dim0_repeats] + [1] * (len(embeds.shape)-1)
+        embeds = torch.cat([embeds[0:negative_start_index], embeds[negative_start_index:].repeat(num_repeats)])
         return embeds
     elif embeds.shape[0] != negative_start_index*2:
         raise RuntimeError("something went wrong, unexpected number of negative embeddings")
