@@ -4,10 +4,13 @@ from enum import Enum
 from typing import Callable, Union, Optional, Any
 
 import torch
-from transformers import CLIPTokenizer, CLIPTextModel, CLIPTextModelWithProjection
+from transformers import CLIPTokenizer, CLIPTextModel, CLIPTextModelWithProjection, T5TokenizerFast, T5EncoderModel
 from typing import List, Tuple
 
 __all__ = ["EmbeddingsProvider", "DownweightMode", "ReturnedEmbeddingsType", "SplitLongTextMode"]
+
+CompatibleTokenizer = Union[CLIPTokenizer, T5TokenizerFast]
+CompatibleTextEncoder = Union[CLIPTextModel, CLIPTextModelWithProjection, T5EncoderModel]
 
 
 class DownweightMode(Enum):
@@ -34,8 +37,8 @@ class ReturnedEmbeddingsType(Enum):
 class EmbeddingsProvider:
 
     def __init__(self,
-                 tokenizer: CLIPTokenizer,
-                 text_encoder: Union[CLIPTextModel, CLIPTextModelWithProjection], # convert a list of int token ids to a tensor of embeddings
+                 tokenizer: CompatibleTokenizer,
+                 text_encoder: CompatibleTextEncoder,
                  textual_inversion_manager: BaseTextualInversionManager = None,
                  dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
                  truncate: bool = True,
@@ -569,8 +572,8 @@ class EmbeddingsProvider:
 
 class EmbeddingsProviderMulti:
     def __init__(self,
-                tokenizers: CLIPTokenizer,
-                text_encoders: Union[CLIPTextModel, CLIPTextModelWithProjection], # convert a list of int token ids to a tensor of embeddings
+                tokenizers: List[CompatibleTokenizer],
+                text_encoders: List[CompatibleTextEncoder],
                 textual_inversion_manager: BaseTextualInversionManager = None,
                 dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
                 truncate: bool = True,
@@ -627,7 +630,7 @@ class EmbeddingsProviderMulti:
                                                      fragment_weights_batch: List[List[float]],
                                                      should_return_tokens: bool = False,
                                                      device='cpu',
-                                 ) -> Union[tuple[list[Any], list[Any]], list[Any]]:
+                                 ) -> Union[torch.Tensor, tuple[torch.Tensor, list[Any]]]:
 
         outputs = [provider.get_embeddings_for_weighted_prompt_fragments(text_batch, fragment_weights_batch, should_return_tokens=should_return_tokens, device=device) for provider in self.embedding_providers]
 
@@ -638,8 +641,9 @@ class EmbeddingsProviderMulti:
             tokens = [o[1] for o in outputs]
             return text_embeddings, tokens
         else:
+            text_embeddings = outputs
             if self.concat_along_embedding_dim:
-                text_embeddings = torch.cat(outputs, dim=-1)
+                text_embeddings = torch.cat(text_embeddings, dim=-1)
             return text_embeddings
 
 def _get_pooled_output_from_text_encoder_output(text_encoder_output):

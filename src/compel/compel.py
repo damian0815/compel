@@ -2,15 +2,12 @@ from dataclasses import dataclass
 from typing import Union, Optional, Callable, List, Tuple
 
 import torch
-from tokenizers import Tokenizer
-from torch import Tensor
-from transformers import CLIPTokenizer, CLIPTextModel, T5EncoderModel, T5Tokenizer, T5TokenizerFast
 
-from . import cross_attention_control
-from .conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
-from .embeddings_provider import EmbeddingsProvider, BaseTextualInversionManager, DownweightMode, \
-    ReturnedEmbeddingsType, EmbeddingsProviderMulti, SplitLongTextMode
-from .prompt_parser import Blend, FlattenedPrompt, PromptParser, CrossAttentionControlSubstitute, Conjunction
+from compel import cross_attention_control
+from compel.conditioning_scheduler import ConditioningScheduler, StaticConditioningScheduler
+from compel.embeddings_provider import EmbeddingsProvider, BaseTextualInversionManager, DownweightMode, \
+    ReturnedEmbeddingsType, EmbeddingsProviderMulti, SplitLongTextMode, CompatibleTokenizer, CompatibleTextEncoder
+from compel.prompt_parser import Blend, FlattenedPrompt, PromptParser, CrossAttentionControlSubstitute, Conjunction
 
 __all__ = ["Compel", "DownweightMode"]
 
@@ -18,13 +15,10 @@ __all__ = ["Compel", "DownweightMode"]
 class ExtraConditioningInfo:
     pass
 
-
 class Compel:
-
-
     def __init__(self,
-                 tokenizer: Union[Union[CLIPTokenizer, T5TokenizerFast], List[Union[CLIPTokenizer, T5TokenizerFast]]],
-                 text_encoder: Union[CLIPTextModel, List[CLIPTextModel|T5EncoderModel]],
+                 tokenizer: Union[CompatibleTokenizer, List[CompatibleTokenizer]],
+                 text_encoder: Union[CompatibleTextEncoder, List[CompatibleTextEncoder]],
                  textual_inversion_manager: Optional[BaseTextualInversionManager] = None,
                  dtype_for_device_getter: Callable[[torch.device], torch.dtype] = lambda device: torch.float32,
                  truncate_long_prompts: bool = True,
