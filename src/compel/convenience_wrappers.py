@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Union, List, Optional
+from typing import Union, List, Optional, Any
 
 import torch
 from diffusers import FluxPipeline, StableDiffusionXLPipeline, StableDiffusionPipeline
@@ -13,6 +13,7 @@ class LabelledConditioning:
     pooled_embeds: Union[torch.Tensor, None] = None
     negative_embeds: Union[torch.Tensor, None] = None
     negative_pooled_embeds: Union[torch.Tensor, None] = None
+    tokenization_info: dict[str, Any] = None
 
 
 class CompelForSD:
@@ -30,12 +31,13 @@ class CompelForSD:
         if type(negative_prompt) is str:
             negative_prompt = [negative_prompt]
         input, negative_start_index = _make_compel_input_with_optional_negative(prompt, negative_prompt)
-        embeds = self.compel(input)
+        embeds, tokenization_info = self.compel(input, return_tokenization=True)
         embeds = _duplicate_negative_conditioning_if_required(embeds, negative_start_index)
         return LabelledConditioning(embeds=embeds[0:negative_start_index],
                                     pooled_embeds=None,
                                     negative_embeds=None if negative_start_index is None else embeds[negative_start_index:],
                                     negative_pooled_embeds=None,
+                                    tokenization_info={'all': tokenization_info}
                                     )
 
 
@@ -63,8 +65,8 @@ class CompelForFlux:
             style_prompt = main_prompt
         main_input, negative_main_start_index = _make_compel_input_with_optional_negative(main_prompt, negative_prompt)
         style_input, negative_style_start_index = _make_compel_input_with_optional_negative(style_prompt, negative_style_prompt)
-        pooled_embeds = self.compel_1(style_input)
-        embeds = self.compel_2(main_input)
+        pooled_embeds, tokenization_info_1 = self.compel_1(style_input)
+        embeds, tokenization_info_2 = self.compel_2(main_input)
 
         embeds = _duplicate_negative_conditioning_if_required(embeds, negative_main_start_index)
         pooled_embeds = _duplicate_negative_conditioning_if_required(pooled_embeds, negative_style_start_index)
@@ -73,6 +75,8 @@ class CompelForFlux:
                                     pooled_embeds=pooled_embeds[0:negative_style_start_index],
                                     negative_embeds=None if negative_main_start_index is None else embeds[negative_main_start_index:],
                                     negative_pooled_embeds=None if negative_style_start_index is None else pooled_embeds[negative_style_start_index:],
+                                    tokenization_info={'all_1': tokenization_info_1,
+                                                       'all_2': tokenization_info_2},
                                     )
 
 
@@ -120,8 +124,8 @@ class CompelForSDXL:
         main_input, negative_main_start_index = _make_compel_input_with_optional_negative(main_prompt, negative_prompt)
         style_input, negative_style_start_index = _make_compel_input_with_optional_negative(style_prompt, negative_style_prompt)
 
-        embeds_left = self.compel_1(main_input)
-        embeds_right, pooled_embeds = self.compel_2(style_input)
+        embeds_left, tokenization_info_1 = self.compel_1(main_input, return_tokenization=True)
+        embeds_right, tokenization_info_2, pooled_embeds = self.compel_2(style_input, return_tokenization=True)
 
         # cat together along the embedding dimension
 
@@ -149,6 +153,8 @@ class CompelForSDXL:
                                     pooled_embeds=pooled_embeds[0:negative_style_start_index],
                                     negative_embeds=None if negative_main_start_index is None else embeds[negative_main_start_index:],
                                     negative_pooled_embeds=None if negative_style_start_index is None else pooled_embeds[negative_style_start_index:],
+                                    tokenization_info={'all_1': tokenization_info_1,
+                                                       'all_2': tokenization_info_2},
                                     )
 
 
