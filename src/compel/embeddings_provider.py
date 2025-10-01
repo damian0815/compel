@@ -135,6 +135,8 @@ class EmbeddingsProvider:
         """
         if self.returned_embeddings_type == ReturnedEmbeddingsType.POOLED:
             # todo: weighting with pooled embeddings
+            # HOWTO: hook CLIPEncoder forward / T5EncoderModel forward to apply weights to the token embeddings BEFORE pushing through
+            # WHY: for CLIP, "pooled output" is just `eos_token` embedding, so we need to apply weights before the text encoder sees them
             texts_unfragmented = [" ".join(fragments) for fragments in text_batch]
             return self.get_pooled_embeddings(texts_unfragmented, return_tokens=should_return_tokens, device=device)
 
@@ -265,8 +267,11 @@ class EmbeddingsProvider:
 
         result = []
         for token_ids in token_ids_list:
-            # trim eos/bos
-            token_ids = token_ids[len(self.bos_sequence):-len(self.eos_sequence)]
+            # trim eos/bos + any trailing padding
+            if token_ids[0] == self.tokenizer.bos_token_id:
+                token_ids = token_ids[1:]
+            while token_ids and token_ids[-1] in [self.tokenizer.pad_token_id, self.tokenizer.eos_token_id]:
+                token_ids = token_ids[:-1]
             # pad for textual inversions with vector length >1
             if self.textual_inversion_manager is not None:
                 token_ids = self.textual_inversion_manager.expand_textual_inversion_token_ids_if_necessary(token_ids)
