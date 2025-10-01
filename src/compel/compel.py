@@ -26,7 +26,7 @@ class Compel:
                  downweight_mode: DownweightMode = DownweightMode.MASK,
                  returned_embeddings_type: ReturnedEmbeddingsType = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED,
                  requires_pooled: Union[bool, List[bool]] = False,
-                 split_long_text_mode: SplitLongTextMode = SplitLongTextMode.SENTENCES,
+                 split_long_text_mode: SplitLongTextMode = SplitLongTextMode.SENTENCES | SplitLongTextMode.COPY_FIRST_CLS_TOKEN,
                  device: Optional[str] = None,
                  ):
         """
@@ -68,8 +68,8 @@ class Compel:
                                                             padding_attention_mask_value = padding_attention_mask_value,
                                                             downweight_mode=downweight_mode,
                                                             returned_embeddings_type=returned_embeddings_type,
-                                                            requires_pooled_mask = requires_pooled,
-                                                            split_long_text_mode = split_long_text_mode
+                                                            requires_pooled_mask=requires_pooled,
+                                                            split_long_text_mode=split_long_text_mode
             )
         else:
             self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
