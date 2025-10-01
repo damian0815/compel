@@ -116,7 +116,7 @@ class Compel:
         building a conditioning tensor from that Conjunction.
         """
         conjunction = self.parse_prompt_string(text)
-        conditioning, tokenization, options = self.build_conditioning_tensor_for_conjunction(conjunction)
+        conditioning, tokenization, options = self.build_conditioning_tensor_for_conjunction(conjunction, return_tokenization=True)
 
         # drop options dict
         if self.requires_pooled:
@@ -201,8 +201,10 @@ class Compel:
 
 
     def build_conditioning_tensor_for_conjunction(
-            self, conjunction: Conjunction
-    ) -> Tuple[torch.Tensor, list[torch.Tensor], dict]:
+            self,
+            conjunction: Conjunction,
+            return_tokenization=False
+    ) -> Union[Tuple[torch.Tensor, dict] | Tuple[torch.Tensor, list[torch.Tensor], dict]]:
         """
         Build a conditioning tensor for the given Conjunction object.
         :return: A tuple of (conditioning, tokenization, options). The contents of the options dict depends on the
@@ -234,7 +236,12 @@ class Compel:
             token_dim = 1
         else:
             assert False, f"unhandled conditioning shape length: {to_concat[0].shape}"
-        return torch.concat(to_concat, dim=token_dim), tokenizations, options
+
+        conditioning = torch.concat(to_concat, dim=token_dim)
+        if return_tokenization:
+            return conditioning, tokenizations, options
+        else:
+            return conditioning, options
 
 
     def build_conditioning_tensor_for_prompt_object(self, prompt: Union[Blend, FlattenedPrompt],
