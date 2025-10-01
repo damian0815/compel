@@ -11,16 +11,15 @@ pipeline = StableDiffusionPipeline.from_pretrained("runwayml/stable-diffusion-v1
 pipeline.scheduler = DPMSolverMultistepScheduler.from_config(pipeline.scheduler.config,
                                                              algorithm_type="dpmsolver++")
 
-prompts = ["a cat playing with a ball++ in the forest", "a cat playing with a ball in the forest"]
+prompts = ["a cat playing with a ball++ in the forest", "a dog wearing a hat++"]
 
 compel = Compel(tokenizer=pipeline.tokenizer, text_encoder=pipeline.text_encoder)
-prompt = "a cat playing with a ball++ in the forest"
 prompt_embeds = compel(prompts)
-#images = pipeline(prompt_embeds=prompt_embeds, num_inference_steps=25, width=512, height=512).images
-#print(images)
+images = pipeline(prompt_embeds=prompt_embeds, num_inference_steps=25, width=512, height=512).images
+print(images)
 
-#images[0].save('sd-img0.jpg')
-#images[1].save('sd-img1.jpg')
+images[0].save('sd-img0.jpg')
+images[1].save('sd-img1.jpg')
 
 # new method using CompelForSD
 compel = CompelForSD(pipeline)
