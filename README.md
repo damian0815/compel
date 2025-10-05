@@ -182,7 +182,8 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 ### 2.3.0 - Tokenization info, negative/style bugfixes
 
-* `CompelFor*` objects now return tokenization info via `conditioning.tokenization_info` dict, which contains keys for `main_positive` and (where appropriate) `main_negative`, `style_positive` and `style_negative`
+* `CompelFor*` objects now return tokenization info via `conditioning.tokenization_info` dict, which contains keys for `main_positive` and (where appropriate) `main_negative`, `style_positive` and `style_negative`.
+* `SplitLongTextMode` enum has additional options for handling the CLS (EOS) token - either the CLS token can be copied from the first chunk to subsequent chunks, or all CLS tokens can be merged and the merge duplicated on all chunks. See `SplitLongTextMode` enum for details.
 * Misc edge case fixes for handling different combinations of style prompts and negative prompts with SDXL/Flux
 
 #### 2.2.1 - fix for #116
