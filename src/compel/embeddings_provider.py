@@ -235,13 +235,13 @@ class EmbeddingsProvider:
                     cls_token_idx = offset + torch.where(tokens[offset:offset+self.tokenizer.model_max_length] == self.tokenizer.eos_token_id)[0][0]
                     cls_token_indices.append(cls_token_idx)
                 if SplitLongTextMode.COPY_FIRST_CLS_TOKEN in self.split_long_text_mode:
-                    print(f"split_long_text_mode is SplitLongTextMode.COPY_FIRST_CLS_TOKEN -> copying CLS embedding from prompt chunk 0 to subsequent {long_prompt_chunk_count-1} chunks")
+                    #print(f"split_long_text_mode is SplitLongTextMode.COPY_FIRST_CLS_TOKEN -> copying CLS embedding from prompt chunk 0 to subsequent {long_prompt_chunk_count-1} chunks")
                     # copy the CLS embedding from chunk 0 to subsequent chunks
                     cls_token_idx_0 = cls_token_indices[0]
                     for idx in cls_token_indices[1:]:
                         lerped_embeddings[idx] = lerped_embeddings[cls_token_idx_0]
                 elif SplitLongTextMode.MERGE_CLS_TOKENS in self.split_long_text_mode:
-                    print(f"split_long_text_mode is SplitLongTextMode.MERGE_CLS_TOKENS -> merging CLS embeddings from all {long_prompt_chunk_count} chunks")
+                    #print(f"split_long_text_mode is SplitLongTextMode.MERGE_CLS_TOKENS -> merging CLS embeddings from all {long_prompt_chunk_count} chunks")
                     # lerp the CLS embeddings from all chunks and write the result to all CLS token positions
                     cls_embeddings = torch.stack([lerped_embeddings[idx] for idx in cls_token_indices], dim=0)
                     merged_cls_embedding = torch.mean(cls_embeddings, dim=0)

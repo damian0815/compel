@@ -180,6 +180,13 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 ## Changelog
 
+### 2.3.0 - tokenization info, bugfixes
+
+* Enhanced tokenization output
+* `CompelFor*` objects now return tokenization info via `conditioning.token_info` dict, which contains keys for `main_positive` and (where appropriate) `main_negative`, `style_positive` and `style_negative`
+
+#### 2.2.1 - fix for #116
+
 ### 2.2.0 - Flux support, usability improvement
 
 * Flux is now supported

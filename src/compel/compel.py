@@ -26,7 +26,7 @@ class Compel:
                  downweight_mode: DownweightMode = DownweightMode.MASK,
                  returned_embeddings_type: ReturnedEmbeddingsType = ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED,
                  requires_pooled: Union[bool, List[bool]] = False,
-                 split_long_text_mode: SplitLongTextMode = SplitLongTextMode.SENTENCES | SplitLongTextMode.COPY_FIRST_CLS_TOKEN,
+                 split_long_text_mode: SplitLongTextMode = SplitLongTextMode.SENTENCES,
                  device: Optional[str] = None,
                  ):
         """
@@ -53,6 +53,10 @@ class Compel:
         `device`: The torch device on which the tensors should be created. If a device is not specified, the device will
             be the same as that of the `text_encoder` at the moment when `build_conditioning_tensor()` is called.
         """
+        if len(set(split_long_text_mode).intersection({SplitLongTextMode.SENTENCES, SplitLongTextMode.PHRASES, SplitLongTextMode.WORDS, SplitLongTextMode.BRUTAL})) != 1:
+            raise ValueError("`split_long_text_mode` must contain EXACTLY ONE of the split modes SENTENCES, PHRASES, WORDS, or BRUTAL.")
+        elif len(set(split_long_text_mode).intersection({SplitLongTextMode.COPY_FIRST_CLS_TOKEN, SplitLongTextMode.MERGE_CLS_TOKENS})) > 1:
+            raise ValueError("`split_long_text_mode` may only contain at most ONE of the CLS_TOKEN options.")
 
         if isinstance(tokenizer, (tuple, list)) and not isinstance(text_encoder, (tuple, list)):
             raise ValueError("Cannot provide list of tokenizers, but not of text encoders.")
@@ -293,8 +297,11 @@ class Compel:
         return conditionings
 
 
-    def pad_conditioning_tensors_to_same_length(self, conditionings: List[torch.Tensor],
-                                                ) -> List[torch.Tensor]:
+    def pad_conditioning_tensors_to_same_length(
+            self,
+            conditionings: List[torch.Tensor],
+            precomputed_padding: Optional[torch.Tensor]=None
+    ) -> List[torch.Tensor]:
         """
         If `truncate_long_prompts` was set to False on initialization, or if your prompt includes a `.and()` operator,
         conditioning tensors do not have a fixed length. This is a problem when using a negative and a positive prompt
@@ -315,11 +322,10 @@ class Compel:
             # nothing to do
             return conditionings
 
-        emptystring_conditioning = self.build_conditioning_tensor("")
-        if type(emptystring_conditioning) is tuple:
-            # discard pooled
-            emptystring_conditioning = emptystring_conditioning[0]
-        return type(self)._pad_conditioning_tensors_to_same_length(conditionings, emptystring_conditioning=emptystring_conditioning)
+        if precomputed_padding is None:
+            precomputed_padding = self.conditioning_provider.empty_z
+        return type(self)._pad_conditioning_tensors_to_same_length(conditionings,
+                                                                   emptystring_conditioning=precomputed_padding)
 
 
 

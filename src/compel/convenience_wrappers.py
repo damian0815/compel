@@ -1,9 +1,11 @@
 from dataclasses import dataclass
-from typing import Union, List, Optional, Any
+from typing import Union, List, Optional, Any, Callable
 
 import torch
 from diffusers import FluxPipeline, StableDiffusionXLPipeline, StableDiffusionPipeline
+from networkx.algorithms.shortest_paths.weighted import negative_edge_cycle
 
+import compel.embeddings_provider
 from compel import Compel, ReturnedEmbeddingsType, BaseTextualInversionManager
 
 
@@ -32,11 +34,11 @@ class CompelForSD:
             negative_prompt = [negative_prompt]
         input, negative_start_index = _make_compel_input_with_optional_negative(prompt, negative_prompt)
         embeds, tokens = self.compel(input, return_tokenization=True)
-        embeds = _duplicate_negative_conditioning_if_required(embeds, negative_start_index)
+        embeds, negative_embeds = _split_embeds_and_pad_negative(embeds, negative_start_index)
         tokenization_info = _build_tokenization_info(tokens, negative_start_index, prefix='main_')
-        return LabelledConditioning(embeds=embeds[0:negative_start_index],
+        return LabelledConditioning(embeds=embeds,
                                     pooled_embeds=None,
-                                    negative_embeds=None if negative_start_index is None else embeds[negative_start_index:],
+                                    negative_embeds=negative_embeds,
                                     negative_pooled_embeds=None,
                                     tokenization_info=tokenization_info
                                     )
@@ -75,16 +77,16 @@ class CompelForFlux:
         pooled_embeds, style_tokens = self.compel_1(style_input, return_tokenization=True)
         embeds, main_tokens = self.compel_2(main_input, return_tokenization=True)
 
-        embeds = _duplicate_negative_conditioning_if_required(embeds, negative_main_start_index)
-        pooled_embeds = _duplicate_negative_conditioning_if_required(pooled_embeds, negative_style_start_index)
+        embeds, negative_embeds = _split_embeds_and_pad_negative(embeds, negative_main_start_index)
+        pooled_embeds, negative_pooled_embeds = _split_embeds_and_pad_negative(pooled_embeds, negative_style_start_index)
 
         tokenization_info = _build_tokenization_info(main_tokens, negative_main_start_index, prefix='main_')
         tokenization_info.update(_build_tokenization_info(style_tokens, negative_style_start_index, prefix='style_'))
 
-        return LabelledConditioning(embeds=embeds[0:negative_main_start_index],
-                                    pooled_embeds=pooled_embeds[0:negative_style_start_index],
-                                    negative_embeds=None if negative_main_start_index is None else embeds[negative_main_start_index:],
-                                    negative_pooled_embeds=None if negative_style_start_index is None else pooled_embeds[negative_style_start_index:],
+        return LabelledConditioning(embeds=embeds,
+                                    pooled_embeds=pooled_embeds,
+                                    negative_embeds=negative_embeds,
+                                    negative_pooled_embeds=negative_pooled_embeds,
                                     tokenization_info=tokenization_info,
                                     )
 
@@ -143,28 +145,28 @@ class CompelForSDXL:
         if embeds_left.shape[1] > embeds_right.shape[1]:
             padding, _ = self.compel_2([""])
             num_repeats = (embeds_left.shape[1]-embeds_right.shape[1]) // padding.shape[1]
-            padding = padding.repeat(1, num_repeats, 1)
+            padding = padding.repeat(embeds_right.shape[0], num_repeats, 1)
             embeds_right = torch.cat([embeds_right, padding], dim=1)
         elif embeds_right.shape[1] > embeds_left.shape[1]:
-            padding = self.compel_1([""] * embeds_left.shape[0])
+            padding = self.compel_1([""])
             num_repeats = (embeds_right.shape[1]-embeds_left.shape[1]) // padding.shape[1]
-            padding = padding.repeat(1, num_repeats, 1)
+            padding = padding.repeat(embeds_left.shape[0], num_repeats, 1)
             embeds_left = torch.cat([embeds_left, padding], dim=1)
 
         # 2. now cat along the embedding dimension
         embeds = torch.cat([embeds_left, embeds_right], dim=-1)
 
         # 3. duplicate negatives if needed to match the number of positives
-        embeds = _duplicate_negative_conditioning_if_required(embeds, negative_main_start_index)
-        pooled_embeds = _duplicate_negative_conditioning_if_required(pooled_embeds, negative_style_start_index)
+        embeds, negative_embeds = _split_embeds_and_pad_negative(embeds, negative_main_start_index)
+        pooled_embeds, negative_pooled_embeds = _split_embeds_and_pad_negative(pooled_embeds, negative_style_start_index)
 
         tokenization_info = _build_tokenization_info(main_tokens, negative_main_start_index, prefix='main_')
         tokenization_info.update(_build_tokenization_info(style_tokens, negative_style_start_index, prefix='style_'))
 
-        return LabelledConditioning(embeds=embeds[0:negative_main_start_index],
-                                    pooled_embeds=pooled_embeds[0:negative_style_start_index],
-                                    negative_embeds=None if negative_main_start_index is None else embeds[negative_main_start_index:],
-                                    negative_pooled_embeds=None if negative_style_start_index is None else pooled_embeds[negative_style_start_index:],
+        return LabelledConditioning(embeds=embeds,
+                                    pooled_embeds=pooled_embeds,
+                                    negative_embeds=negative_embeds,
+                                    negative_pooled_embeds=negative_pooled_embeds,
                                     tokenization_info=tokenization_info,
                                     )
 
@@ -180,22 +182,35 @@ def _make_compel_input_with_optional_negative(positive_prompt: list[str], negati
     negative_main_start_index = len(positive_prompt)
     return main_input, negative_main_start_index
 
-def _duplicate_negative_conditioning_if_required(embeds: torch.Tensor, negative_start_index: Optional[int]):
-    if negative_start_index is None:
-        return embeds
-    elif embeds.shape[0] - negative_start_index == 1:
-        # need to repeat negatives
-        num_dim0_repeats = negative_start_index
-        num_repeats = [num_dim0_repeats] + [1] * (len(embeds.shape)-1)
-        embeds = torch.cat([embeds[0:negative_start_index], embeds[negative_start_index:].repeat(num_repeats)])
-        return embeds
-    elif embeds.shape[0] != negative_start_index*2:
-        raise RuntimeError("something went wrong, unexpected number of negative embeddings")
-    return embeds
-
 def _build_tokenization_info(tokens: torch.Tensor, negative_start_index: Optional[int], prefix: str=''):
     tokenization_info = {}
     tokenization_info[f'{prefix}positive'] = tokens[0:negative_start_index]
     if negative_start_index is not None:
         tokenization_info[f'{prefix}negative'] = tokens[negative_start_index:]
     return tokenization_info
+
+def _split_embeds_and_pad_negative(combined_embeds: torch.Tensor, negative_start_index: Optional[int]):
+    """
+    split combined embeddings into positive and negative parts, duplicating negatives if needed.
+    """
+    def _duplicate_negative_conditioning_if_required(embeds: torch.Tensor, negative_start_index: Optional[int]):
+        if negative_start_index is None:
+            return embeds
+        elif embeds.shape[0] - negative_start_index == 1:
+            # need to repeat negatives
+            num_dim0_repeats = negative_start_index
+            num_repeats = [num_dim0_repeats] + [1] * (len(embeds.shape) - 1)
+            embeds = torch.cat([embeds[0:negative_start_index], embeds[negative_start_index:].repeat(num_repeats)])
+            return embeds
+        elif embeds.shape[0] != negative_start_index * 2:
+            raise RuntimeError("something went wrong, unexpected number of negative embeddings")
+        return embeds
+
+    combined_embeds = _duplicate_negative_conditioning_if_required(combined_embeds, negative_start_index)
+    if negative_start_index is None:
+        embeds = combined_embeds
+        negative_embeds = None
+    else:
+        embeds = combined_embeds[0:negative_start_index]
+        negative_embeds = combined_embeds[negative_start_index:]
+    return embeds, negative_embeds
