@@ -252,7 +252,7 @@ class Compel:
 
 
     def build_conditioning_tensor_for_prompt_object(self, prompt: Union[Blend, FlattenedPrompt],
-                                                    ) -> Tuple[Tuple[torch.Tensor, list|torch.Tensor], dict]:
+                                                    ) -> Tuple[Tuple[torch.Tensor, Union[list, torch.Tensor]], dict]:
         """
         Build a conditioning tensor for the given prompt object (either a Blend or a FlattenedPrompt).
         Returns a tuple of ((conditioning, tokenization), options), where tokenization is a list of lists of token IDs,
