@@ -53,9 +53,9 @@ class Compel:
         `device`: The torch device on which the tensors should be created. If a device is not specified, the device will
             be the same as that of the `text_encoder` at the moment when `build_conditioning_tensor()` is called.
         """
-        if len(set(split_long_text_mode).intersection({SplitLongTextMode.SENTENCES, SplitLongTextMode.PHRASES, SplitLongTextMode.WORDS, SplitLongTextMode.BRUTAL})) != 1:
+        if len(set(iter(split_long_text_mode)).intersection({SplitLongTextMode.SENTENCES, SplitLongTextMode.PHRASES, SplitLongTextMode.WORDS, SplitLongTextMode.BRUTAL})) != 1:
             raise ValueError("`split_long_text_mode` must contain EXACTLY ONE of the split modes SENTENCES, PHRASES, WORDS, or BRUTAL.")
-        elif len(set(split_long_text_mode).intersection({SplitLongTextMode.COPY_FIRST_CLS_TOKEN, SplitLongTextMode.MERGE_CLS_TOKENS})) > 1:
+        elif len(set(iter(split_long_text_mode)).intersection({SplitLongTextMode.COPY_FIRST_CLS_TOKEN, SplitLongTextMode.MERGE_CLS_TOKENS})) > 1:
             raise ValueError("`split_long_text_mode` may only contain at most ONE of the CLS_TOKEN options.")
 
         if isinstance(tokenizer, (tuple, list)) and not isinstance(text_encoder, (tuple, list)):
@@ -208,7 +208,7 @@ class Compel:
             self,
             conjunction: Conjunction,
             return_tokenization=False
-    ) -> Union[Tuple[torch.Tensor, dict] | Tuple[torch.Tensor, list[torch.Tensor], dict]]:
+    ) -> Union[Tuple[torch.Tensor, dict], Tuple[torch.Tensor, list[torch.Tensor], dict]]:
         """
         Build a conditioning tensor for the given Conjunction object.
         :return: A tuple of (conditioning, tokenization, options). The contents of the options dict depends on the
