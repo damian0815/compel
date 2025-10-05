@@ -180,10 +180,10 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 ## Changelog
 
-### 2.3.0 - tokenization info, bugfixes
+### 2.3.0 - Tokenization info, negative/style bugfixes
 
-* Enhanced tokenization output
-* `CompelFor*` objects now return tokenization info via `conditioning.token_info` dict, which contains keys for `main_positive` and (where appropriate) `main_negative`, `style_positive` and `style_negative`
+* `CompelFor*` objects now return tokenization info via `conditioning.tokenization_info` dict, which contains keys for `main_positive` and (where appropriate) `main_negative`, `style_positive` and `style_negative`
+* Misc edge case fixes for handling different combinations of style prompts and negative prompts with SDXL/Flux
 
 #### 2.2.1 - fix for #116
 
