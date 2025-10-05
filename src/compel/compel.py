@@ -53,9 +53,11 @@ class Compel:
         `device`: The torch device on which the tensors should be created. If a device is not specified, the device will
             be the same as that of the `text_encoder` at the moment when `build_conditioning_tensor()` is called.
         """
-        if len(set(iter(split_long_text_mode)).intersection({SplitLongTextMode.SENTENCES, SplitLongTextMode.PHRASES, SplitLongTextMode.WORDS, SplitLongTextMode.BRUTAL})) != 1:
+        def count_matching_flags(flags_to_test):
+            return sum(1 for f in flags_to_test if f in split_long_text_mode)
+        if count_matching_flags([SplitLongTextMode.SENTENCES, SplitLongTextMode.PHRASES, SplitLongTextMode.WORDS, SplitLongTextMode.BRUTAL]) != 1:
             raise ValueError("`split_long_text_mode` must contain EXACTLY ONE of the split modes SENTENCES, PHRASES, WORDS, or BRUTAL.")
-        elif len(set(iter(split_long_text_mode)).intersection({SplitLongTextMode.COPY_FIRST_CLS_TOKEN, SplitLongTextMode.MERGE_CLS_TOKENS})) > 1:
+        if count_matching_flags([SplitLongTextMode.COPY_FIRST_CLS_TOKEN, SplitLongTextMode.MERGE_CLS_TOKENS]) > 1:
             raise ValueError("`split_long_text_mode` may only contain at most ONE of the CLS_TOKEN options.")
 
         if isinstance(tokenizer, (tuple, list)) and not isinstance(text_encoder, (tuple, list)):
