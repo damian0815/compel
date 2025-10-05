@@ -294,8 +294,12 @@ class EmbeddingsProvider:
             # trim eos/bos + any trailing padding
             if token_ids[0] == self.tokenizer.bos_token_id:
                 token_ids = token_ids[1:]
-            while token_ids and token_ids[-1] in [self.tokenizer.pad_token_id, self.tokenizer.eos_token_id]:
-                token_ids = token_ids[:-1]
+            if padding == 'max_length':
+                if token_ids[-1] == self.tokenizer.eos_token_id:
+                    token_ids = token_ids[:-1]
+            else:
+                while token_ids and token_ids[-1] in [self.tokenizer.pad_token_id, self.tokenizer.eos_token_id]:
+                    token_ids = token_ids[:-1]
             # pad for textual inversions with vector length >1
             if self.textual_inversion_manager is not None:
                 token_ids = self.textual_inversion_manager.expand_textual_inversion_token_ids_if_necessary(token_ids)

@@ -4,7 +4,7 @@ from typing import Union, List, Optional, Any
 import torch
 from diffusers import FluxPipeline, StableDiffusionXLPipeline, StableDiffusionPipeline
 
-from compel import Compel, ReturnedEmbeddingsType, DiffusersTextualInversionManager, BaseTextualInversionManager
+from compel import Compel, ReturnedEmbeddingsType, BaseTextualInversionManager
 
 
 @dataclass(frozen=True)
@@ -31,13 +31,14 @@ class CompelForSD:
         if type(negative_prompt) is str:
             negative_prompt = [negative_prompt]
         input, negative_start_index = _make_compel_input_with_optional_negative(prompt, negative_prompt)
-        embeds, tokenization_info = self.compel(input, return_tokenization=True)
+        embeds, tokens = self.compel(input, return_tokenization=True)
         embeds = _duplicate_negative_conditioning_if_required(embeds, negative_start_index)
+        tokenization_info = _build_tokenization_info(tokens, negative_start_index, prefix='main_')
         return LabelledConditioning(embeds=embeds[0:negative_start_index],
                                     pooled_embeds=None,
                                     negative_embeds=None if negative_start_index is None else embeds[negative_start_index:],
                                     negative_pooled_embeds=None,
-                                    tokenization_info={'all': tokenization_info}
+                                    tokenization_info=tokenization_info
                                     )
 
 
@@ -63,20 +64,28 @@ class CompelForFlux:
             negative_prompt = [negative_prompt]
         if style_prompt is None:
             style_prompt = main_prompt
+        elif type(style_prompt) is str:
+            style_prompt = [style_prompt]
+        if negative_style_prompt is None:
+            negative_style_prompt = negative_prompt
+        elif type(negative_style_prompt) is str:
+            negative_style_prompt = [negative_style_prompt]
         main_input, negative_main_start_index = _make_compel_input_with_optional_negative(main_prompt, negative_prompt)
         style_input, negative_style_start_index = _make_compel_input_with_optional_negative(style_prompt, negative_style_prompt)
-        pooled_embeds, tokenization_info_1 = self.compel_1(style_input)
-        embeds, tokenization_info_2 = self.compel_2(main_input)
+        pooled_embeds, style_tokens = self.compel_1(style_input, return_tokenization=True)
+        embeds, main_tokens = self.compel_2(main_input, return_tokenization=True)
 
         embeds = _duplicate_negative_conditioning_if_required(embeds, negative_main_start_index)
         pooled_embeds = _duplicate_negative_conditioning_if_required(pooled_embeds, negative_style_start_index)
+
+        tokenization_info = _build_tokenization_info(main_tokens, negative_main_start_index, prefix='main_')
+        tokenization_info.update(_build_tokenization_info(style_tokens, negative_style_start_index, prefix='style_'))
 
         return LabelledConditioning(embeds=embeds[0:negative_main_start_index],
                                     pooled_embeds=pooled_embeds[0:negative_style_start_index],
                                     negative_embeds=None if negative_main_start_index is None else embeds[negative_main_start_index:],
                                     negative_pooled_embeds=None if negative_style_start_index is None else pooled_embeds[negative_style_start_index:],
-                                    tokenization_info={'all_1': tokenization_info_1,
-                                                       'all_2': tokenization_info_2},
+                                    tokenization_info=tokenization_info,
                                     )
 
 
@@ -124,8 +133,8 @@ class CompelForSDXL:
         main_input, negative_main_start_index = _make_compel_input_with_optional_negative(main_prompt, negative_prompt)
         style_input, negative_style_start_index = _make_compel_input_with_optional_negative(style_prompt, negative_style_prompt)
 
-        embeds_left, tokenization_info_1 = self.compel_1(main_input, return_tokenization=True)
-        embeds_right, tokenization_info_2, pooled_embeds = self.compel_2(style_input, return_tokenization=True)
+        embeds_left, main_tokens = self.compel_1(main_input, return_tokenization=True)
+        embeds_right, style_tokens, pooled_embeds = self.compel_2(style_input, return_tokenization=True)
 
         # cat together along the embedding dimension
 
@@ -149,12 +158,14 @@ class CompelForSDXL:
         embeds = _duplicate_negative_conditioning_if_required(embeds, negative_main_start_index)
         pooled_embeds = _duplicate_negative_conditioning_if_required(pooled_embeds, negative_style_start_index)
 
+        tokenization_info = _build_tokenization_info(main_tokens, negative_main_start_index, prefix='main_')
+        tokenization_info.update(_build_tokenization_info(style_tokens, negative_style_start_index, prefix='style_'))
+
         return LabelledConditioning(embeds=embeds[0:negative_main_start_index],
                                     pooled_embeds=pooled_embeds[0:negative_style_start_index],
                                     negative_embeds=None if negative_main_start_index is None else embeds[negative_main_start_index:],
                                     negative_pooled_embeds=None if negative_style_start_index is None else pooled_embeds[negative_style_start_index:],
-                                    tokenization_info={'all_1': tokenization_info_1,
-                                                       'all_2': tokenization_info_2},
+                                    tokenization_info=tokenization_info,
                                     )
 
 
@@ -181,3 +192,10 @@ def _duplicate_negative_conditioning_if_required(embeds: torch.Tensor, negative_
     elif embeds.shape[0] != negative_start_index*2:
         raise RuntimeError("something went wrong, unexpected number of negative embeddings")
     return embeds
+
+def _build_tokenization_info(tokens: torch.Tensor, negative_start_index: Optional[int], prefix: str=''):
+    tokenization_info = {}
+    tokenization_info[f'{prefix}positive'] = tokens[0:negative_start_index]
+    if negative_start_index is not None:
+        tokenization_info[f'{prefix}negative'] = tokens[negative_start_index:]
+    return tokenization_info

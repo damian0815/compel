@@ -219,7 +219,10 @@ class Compel:
         empty_conditioning = None
         for i, p in enumerate(conjunction.prompts):
             (this_conditioning, this_tokens), this_options = self.build_conditioning_tensor_for_prompt_object(p)
-            tokenizations.append(this_tokens)
+            if type(this_tokens) is list:
+                tokenizations.extend(this_tokens)
+            else:
+                tokenizations.append(this_tokens)
             options.update(this_options)  # this is not a smart way to do this but 🤷‍
             weight = conjunction.weights[i]
             if weight != 1:
@@ -232,13 +235,13 @@ class Compel:
         if len(to_concat[0].shape) == 2:
             token_dim = 0
         elif len(to_concat[0].shape) == 3:
-            #print("huh. weird. please file a bug on the Compel github repo stating that \"build_conditioning_tensor_for_conjunction shape has length 3\". include your prompts and the code you use to invoke Compel.")
             token_dim = 1
         else:
             assert False, f"unhandled conditioning shape length: {to_concat[0].shape}"
 
         conditioning = torch.concat(to_concat, dim=token_dim)
         if return_tokenization:
+            tokenizations = torch.concat(tokenizations, dim=-1)
             return conditioning, tokenizations, options
         else:
             return conditioning, options
