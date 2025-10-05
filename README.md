@@ -144,7 +144,7 @@ prompt = "a cat playing with a ball++ in the forest"
 style_prompt = "painting by van gogh, impasto, thick brush strokes"
 negative_prompt = "low quality, blurry"
 negative_style_prompt = "photography"
-compel = CompelForSDXL(pipeline) # or CompelForFlux(pipe)
+compel = CompelForSDXL(pipeline) # or CompelForFlux
 conditioning = compel(prompt=prompt, negative_prompt=negative_prompt, 
                       style_prompt=style_prompt, negative_style_prompt=negative_style_prompt)
 
@@ -179,6 +179,14 @@ If this doesn't help, you could try this advice offered by @kshieh1:
 See https://github.com/damian0815/compel/issues/24 for more details. Thanks @kshieh1 !
 
 ## Changelog
+
+### 2.3.0 - Tokenization info, SplitLongTextMode CLS token handling, negative/style bugfixes
+
+* `CompelFor*` objects now return tokenization info via `conditioning.tokenization_info` dict, which contains keys for `main_positive` and (where appropriate) `main_negative`, `style_positive` and `style_negative`.
+* `SplitLongTextMode` enum has additional options for handling the CLS (EOS) token - either the CLS token can be copied from the first chunk to subsequent chunks, or all CLS tokens can be merged and the merge duplicated on all chunks. See `SplitLongTextMode` enum for details.
+* Misc edge case fixes for handling different combinations of style prompts and negative prompts with SDXL/Flux
+
+#### 2.2.1 - fix for #116
 
 ### 2.2.0 - Flux support, usability improvement
 

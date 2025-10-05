@@ -113,7 +113,7 @@ class DummyTokenizer():
             raise Exception(f"for unit tests only 'do_not_pad' and 'max_length' is supported as a padding strategy (got '{padding_strategy}')")
 
         if padding_strategy == "max_length":
-            tokenized = [(tokens[:-1] + (self.model_max_length - len(tokens)) * [self.pad_token_id] + tokens[1:]) for tokens in tokenized]
+            tokenized = [(tokens[:-1] + (self.model_max_length - len(tokens)) * [self.pad_token_id] + tokens[-1:]) for tokens in tokenized]
 
         return {'input_ids': tokenized}
 

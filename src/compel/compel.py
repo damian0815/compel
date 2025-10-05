@@ -53,6 +53,12 @@ class Compel:
         `device`: The torch device on which the tensors should be created. If a device is not specified, the device will
             be the same as that of the `text_encoder` at the moment when `build_conditioning_tensor()` is called.
         """
+        def count_matching_flags(flags_to_test):
+            return sum(1 for f in flags_to_test if f in split_long_text_mode)
+        if count_matching_flags([SplitLongTextMode.SENTENCES, SplitLongTextMode.PHRASES, SplitLongTextMode.WORDS, SplitLongTextMode.BRUTAL]) != 1:
+            raise ValueError("`split_long_text_mode` must contain EXACTLY ONE of the split modes SENTENCES, PHRASES, WORDS, or BRUTAL.")
+        if count_matching_flags([SplitLongTextMode.COPY_FIRST_CLS_TOKEN, SplitLongTextMode.MERGE_CLS_TOKENS]) > 1:
+            raise ValueError("`split_long_text_mode` may only contain at most ONE of the CLS_TOKEN options.")
 
         if isinstance(tokenizer, (tuple, list)) and not isinstance(text_encoder, (tuple, list)):
             raise ValueError("Cannot provide list of tokenizers, but not of text encoders.")
@@ -68,8 +74,8 @@ class Compel:
                                                             padding_attention_mask_value = padding_attention_mask_value,
                                                             downweight_mode=downweight_mode,
                                                             returned_embeddings_type=returned_embeddings_type,
-                                                            requires_pooled_mask = requires_pooled,
-                                                            split_long_text_mode = split_long_text_mode
+                                                            requires_pooled_mask=requires_pooled,
+                                                            split_long_text_mode=split_long_text_mode
             )
         else:
             self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
@@ -103,26 +109,47 @@ class Compel:
         return StaticConditioningScheduler(positive_conditioning=positive_conditioning,
                                            negative_conditioning=negative_conditioning)
 
-    def build_conditioning_tensor(self, text: str) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+    def build_conditioning_tensor(
+            self, text: str, return_tokenization=False
+    ) -> Union[
+        torch.Tensor, # conditioning only
+        Tuple[torch.Tensor, torch.Tensor], # conditioning + pooled
+        Tuple[torch.Tensor, list[torch.Tensor]], # conditioning + tokenization
+        Tuple[torch.Tensor, list[torch.Tensor], torch.Tensor], # conditioning + tokenization + pooled
+    ]:
         """
         Build a conditioning tensor by parsing the text for Compel syntax, constructing a Conjunction, and then
         building a conditioning tensor from that Conjunction.
         """
         conjunction = self.parse_prompt_string(text)
-        output = self.build_conditioning_tensor_for_conjunction(conjunction)
+        conditioning, tokenization, options = self.build_conditioning_tensor_for_conjunction(conjunction, return_tokenization=True)
 
         # drop options dict
         if self.requires_pooled:
             pooled = self.conditioning_provider.get_pooled_embeddings([text], device=self.device)
-            return output[0], pooled
+            if return_tokenization:
+                return conditioning, tokenization, pooled
+            else:
+                return conditioning, pooled
         else:
-            return output[0]
+            if return_tokenization:
+                return conditioning, tokenization
+            else:
+                return conditioning
+
 
     def disable_no_weights_bypass(self):
         self.conditioning_provider.disable_no_weights_bypass()
 
     @torch.no_grad()
-    def __call__(self, text: Union[str, List[str]]) -> torch.FloatTensor:
+    def __call__(
+            self, text: Union[str, List[str]], return_tokenization=False
+    ) -> Union[
+        torch.Tensor, # conditioning only
+        Tuple[torch.Tensor, torch.Tensor], # conditioning + pooled
+        Tuple[torch.Tensor, list], # conditioning + tokenization
+        Tuple[torch.Tensor, list, torch.Tensor] # conditioning + tokenization + pooled
+        ]:
         """
         Take a string or a list of strings and build conditioning tensors to match.
 
@@ -134,24 +161,29 @@ class Compel:
             text = [text]
 
         cond_tensor = []
+        tokenizations = []
         pooled = []
         for text_input in text:
-            output = self.build_conditioning_tensor(text_input)
-
+            output = self.build_conditioning_tensor(text_input, return_tokenization=True)
+            cond_tensor.append(output[0])
+            tokenizations.append(output[1])
             if self.requires_pooled:
-                cond_tensor.append(output[0])
-                pooled.append(output[1])
-            else:
-                cond_tensor.append(output)
+                pooled.append(output[2])
 
         cond_tensor = self.pad_conditioning_tensors_to_same_length(conditionings=cond_tensor)
         cond_tensor = torch.cat(cond_tensor)
 
         if self.requires_pooled:
             pooled = torch.cat(pooled)
-            return cond_tensor, pooled
+            if return_tokenization:
+                return cond_tensor, tokenizations, pooled
+            else:
+                return cond_tensor, pooled
         else:
-            return cond_tensor
+            if return_tokenization:
+                return cond_tensor, tokenizations
+            else:
+                return cond_tensor
 
     @classmethod
     def parse_prompt_string(cls, prompt_string: str) -> Conjunction:
@@ -174,21 +206,29 @@ class Compel:
         return self.conditioning_provider.tokenizer.tokenize(text)
 
 
-    def build_conditioning_tensor_for_conjunction(self, conjunction: Conjunction) -> Union[Tuple[torch.Tensor, torch.Tensor, dict], Tuple[torch.Tensor, dict]]:
+    def build_conditioning_tensor_for_conjunction(
+            self,
+            conjunction: Conjunction,
+            return_tokenization=False
+    ) -> Union[Tuple[torch.Tensor, dict], Tuple[torch.Tensor, list[torch.Tensor], dict]]:
         """
         Build a conditioning tensor for the given Conjunction object.
-        :return: A tuple of (conditioning tensor, options dict) (or (conditining, conditining, options) if multiple
-        EmbeddingProviders are in use). The contents of the options dict depends on the prompt, at the moment it is only
-        used for returning cross-attention control conditioning data (`.swap()`).
+        :return: A tuple of (conditioning, tokenization, options). The contents of the options dict depends on the
+        prompt, at the moment it is only used for returning cross-attention control conditioning data (`.swap()`).
         """
         if len(conjunction.prompts) > 1 and conjunction.type != 'AND':
             raise ValueError("Only AND conjunctions are supported by build_conditioning_tensor()")
         # concatenate each prompt in the conjunction (typically there will only be 1)
         to_concat = []
+        tokenizations = []
         options = {}
         empty_conditioning = None
         for i, p in enumerate(conjunction.prompts):
-            this_conditioning, this_options = self.build_conditioning_tensor_for_prompt_object(p)
+            (this_conditioning, this_tokens), this_options = self.build_conditioning_tensor_for_prompt_object(p)
+            if type(this_tokens) is list:
+                tokenizations.extend(this_tokens)
+            else:
+                tokenizations.append(this_tokens)
             options.update(this_options)  # this is not a smart way to do this but 🤷‍
             weight = conjunction.weights[i]
             if weight != 1:
@@ -201,24 +241,31 @@ class Compel:
         if len(to_concat[0].shape) == 2:
             token_dim = 0
         elif len(to_concat[0].shape) == 3:
-            #print("huh. weird. please file a bug on the Compel github repo stating that \"build_conditioning_tensor_for_conjunction shape has length 3\". include your prompts and the code you use to invoke Compel.")
             token_dim = 1
         else:
             assert False, f"unhandled conditioning shape length: {to_concat[0].shape}"
-        return torch.concat(to_concat, dim=token_dim), options
+
+        conditioning = torch.concat(to_concat, dim=token_dim)
+        if return_tokenization:
+            tokenizations = torch.concat(tokenizations, dim=-1)
+            return conditioning, tokenizations, options
+        else:
+            return conditioning, options
 
 
     def build_conditioning_tensor_for_prompt_object(self, prompt: Union[Blend, FlattenedPrompt],
-                                                    ) -> Tuple[torch.Tensor, dict]:
+                                                    ) -> Tuple[Tuple[torch.Tensor, Union[list, torch.Tensor]], dict]:
         """
         Build a conditioning tensor for the given prompt object (either a Blend or a FlattenedPrompt).
+        Returns a tuple of ((conditioning, tokenization), options), where tokenization is a list of lists of token IDs,
+        and options is a prompt-specific dict of extra options (currently only used for cross-attention control).
         """
         if type(prompt) is Blend:
             return self._get_conditioning_for_blend(prompt), {}
         elif type(prompt) is FlattenedPrompt:
             if prompt.wants_cross_attention_control:
                 cac_args = self._get_conditioning_for_cross_attention_control(prompt)
-                return cac_args.original_conditioning, { 'cross_attention_control': cac_args }
+                return (cac_args.original_conditioning, torch.empty(0)), { 'cross_attention_control': cac_args }
             else:
                 return self._get_conditioning_for_flattened_prompt(prompt), {}
 
@@ -252,8 +299,11 @@ class Compel:
         return conditionings
 
 
-    def pad_conditioning_tensors_to_same_length(self, conditionings: List[torch.Tensor],
-                                                ) -> List[torch.Tensor]:
+    def pad_conditioning_tensors_to_same_length(
+            self,
+            conditionings: List[torch.Tensor],
+            precomputed_padding: Optional[torch.Tensor]=None
+    ) -> List[torch.Tensor]:
         """
         If `truncate_long_prompts` was set to False on initialization, or if your prompt includes a `.and()` operator,
         conditioning tensors do not have a fixed length. This is a problem when using a negative and a positive prompt
@@ -274,38 +324,41 @@ class Compel:
             # nothing to do
             return conditionings
 
-        emptystring_conditioning = self.build_conditioning_tensor("")
-        if type(emptystring_conditioning) is tuple:
-            # discard pooled
-            emptystring_conditioning = emptystring_conditioning[0]
-        return type(self)._pad_conditioning_tensors_to_same_length(conditionings, emptystring_conditioning=emptystring_conditioning)
+        if precomputed_padding is None:
+            precomputed_padding = self.conditioning_provider.empty_z
+        return type(self)._pad_conditioning_tensors_to_same_length(conditionings,
+                                                                   emptystring_conditioning=precomputed_padding)
 
 
 
     def _get_conditioning_for_flattened_prompt(self,
                                                prompt: FlattenedPrompt,
-                                               should_return_tokens: bool=False
-                                               ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
+                                               ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Returns (conditioning, tokenization)
+        """
         if type(prompt) is not FlattenedPrompt:
             raise ValueError(f"embeddings can only be made from FlattenedPrompts, got {type(prompt).__name__} instead")
         fragments = [x.text for x in prompt.children]
         weights = [x.weight for x in prompt.children]
         return self.conditioning_provider.get_embeddings_for_weighted_prompt_fragments(
             text_batch=[fragments], fragment_weights_batch=[weights],
-            should_return_tokens=should_return_tokens, device=self.device)
+            should_return_tokens=True, device=self.device)
 
 
     def _get_conditioning_for_blend(self, blend: Blend):
         conditionings_to_blend = []
+        tokenizations = []
         for i, flattened_prompt in enumerate(blend.prompts):
-            this_conditioning = self._get_conditioning_for_flattened_prompt(flattened_prompt)
+            this_conditioning, tokenization = self._get_conditioning_for_flattened_prompt(flattened_prompt, should_return_tokens=True)
             conditionings_to_blend.append(this_conditioning)
+            tokenizations.append(tokenization)
         conditionings_to_blend = self.pad_conditioning_tensors_to_same_length(conditionings_to_blend)
         conditionings_to_blend_tensor = torch.cat(conditionings_to_blend).unsqueeze(0)
         conditioning = EmbeddingsProvider.apply_embedding_weights(conditionings_to_blend_tensor,
                                                                   blend.weights,
                                                                   normalize=blend.normalize_weights)
-        return conditioning
+        return conditioning, tokenizations
 
 
 

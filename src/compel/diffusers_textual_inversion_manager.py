@@ -1,6 +1,6 @@
 from typing import List
 
-from .embeddings_provider import BaseTextualInversionManager
+from compel.embeddings_provider import BaseTextualInversionManager
 
 
 class DiffusersTextualInversionManager(BaseTextualInversionManager):
