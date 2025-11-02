@@ -51,6 +51,7 @@ class DummyTransformer:
     def forward(self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor], output_hidden_states: bool=False, return_dict: bool=True):
         if input_ids.shape[0] > 1:
             raise AssertionError("for unit testing, only batch size =1 is supported")
+        assert input_ids.shape[1] <= self.text_model_max_length
         all_embeddings = torch.cat([e.unsqueeze(0) for e in self.embeddings]).to(self.device)
         embeddings = torch.index_select(all_embeddings, dim=0, index=input_ids.to(self.device).squeeze(0)
                                         ).unsqueeze(0)

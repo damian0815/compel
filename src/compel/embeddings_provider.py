@@ -281,11 +281,15 @@ class EmbeddingsProvider:
         """
         # for args documentation of self.tokenizer() see ENCODE_KWARGS_DOCSTRING in tokenization_utils_base.py
         # (part of `transformers` lib)
+
+        if padding not in ['do_not_pad', 'max_length']:
+            raise ValueError(f"unsupported padding mode: {padding}")
+
         truncation = self.truncate_to_model_max_length if truncation_override is None else truncation_override
         token_ids_list = self.tokenizer(
             texts,
             truncation=truncation,
-            padding=padding,
+            padding='do_not_pad',
             return_tensors=None,  # just give me lists of ints
         )['input_ids']
 
@@ -294,19 +298,21 @@ class EmbeddingsProvider:
             # trim eos/bos + any trailing padding
             if token_ids[0] == self.tokenizer.bos_token_id:
                 token_ids = token_ids[1:]
-            if padding == 'max_length':
-                if token_ids[-1] == self.tokenizer.eos_token_id:
-                    token_ids = token_ids[:-1]
-            else:
-                while token_ids and token_ids[-1] in [self.tokenizer.pad_token_id, self.tokenizer.eos_token_id]:
-                    token_ids = token_ids[:-1]
+            if token_ids[-1] == self.tokenizer.eos_token_id:
+                token_ids = token_ids[:-1]
             # pad for textual inversions with vector length >1
             if self.textual_inversion_manager is not None:
                 token_ids = self.textual_inversion_manager.expand_textual_inversion_token_ids_if_necessary(token_ids)
+                if truncation:
+                    token_ids = token_ids[:self.max_token_count - len(self.bos_sequence) - len(self.eos_sequence)]
 
             # add back eos/bos if requested
             if include_start_and_end_markers:
                 token_ids = self.bos_sequence + token_ids + self.eos_sequence
+
+            if padding == 'max_length':
+                padding_token_count = self.max_token_count - (len(token_ids)%self.max_token_count)
+                token_ids = token_ids + [self.tokenizer.pad_token_type_id] * padding_token_count
 
             result.append(token_ids)
 
