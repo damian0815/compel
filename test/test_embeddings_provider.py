@@ -9,7 +9,7 @@ from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, 
 
 def make_dummy_embeddings_provider(max_length=10, embedding_length=768, **kwargs) -> EmbeddingsProvider:
     tokenizer = DummyTokenizer(max_length)
-    text_encoder = DummyTransformer(embedding_length=embedding_length)
+    text_encoder = DummyTransformer(text_model_max_length=max_length, embedding_length=embedding_length)
     return EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder, **kwargs)
 
 BOS = len(KNOWN_WORDS)
@@ -406,6 +406,7 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         expected_mask = torch.Tensor([1] * 16 + [0] * 4)
         expected_embeddings = ep.build_weighted_embedding_tensor(expected_token_ids, torch.tensor(expected_weights), attention_mask=expected_mask)
         self.assertTrue(torch.allclose(expected_embeddings, embeddings, atol=1e-8))
+
 
 
 

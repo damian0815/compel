@@ -146,7 +146,7 @@ class CompelTestCase(unittest.TestCase):
 
     def test_too_long_prompt_notruncate(self):
         tokenizer = DummyTokenizer(model_max_length=10)
-        text_encoder = DummyTransformer()
+        text_encoder = DummyTransformer(text_model_max_length=10)
         compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
 
         positive_prompt = " ".join(KNOWN_WORDS[:3] * 4)
@@ -168,7 +168,7 @@ class CompelTestCase(unittest.TestCase):
 
     def test_pad_conditioning_tensors_to_same_length(self):
         tokenizer = DummyTokenizer(model_max_length=5)
-        text_encoder = DummyTransformer(embedding_length=7)
+        text_encoder = DummyTransformer(text_model_max_length=5, embedding_length=7)
         compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
 
         embeds_a = torch.randn([1, tokenizer.model_max_length*2, text_encoder.embedding_length])
@@ -267,7 +267,7 @@ class CompelTestCase(unittest.TestCase):
     def test_long_and_short_call(self):
         max_length = 5
         tokenizer = DummyTokenizer(model_max_length=max_length)
-        text_encoder = DummyTransformer()
+        text_encoder = DummyTransformer(text_model_max_length=max_length)
         compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
 
         prompts = ["a b c", "a b c a b c a b"]
@@ -278,7 +278,7 @@ class CompelTestCase(unittest.TestCase):
     def test_concat_for_and(self):
         max_length = 5
         tokenizer = DummyTokenizer(model_max_length=max_length)
-        text_encoder = DummyTransformer()
+        text_encoder = DummyTransformer(text_model_max_length=max_length)
         compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
 
         embeds_separate = compel(['a b c', 'b a'])
@@ -304,7 +304,7 @@ class CompelTestCase(unittest.TestCase):
 
         max_length = 5
         tokenizer = DummyTokenizer(model_max_length=max_length)
-        text_encoder = DummyTransformer()
+        text_encoder = DummyTransformer(text_model_max_length=max_length)
         compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder, truncate_long_prompts=False)
         text = "a b gone</w> a b .</w> gone</w> home</w> a .</w>"
         # should not raise any exceptions
