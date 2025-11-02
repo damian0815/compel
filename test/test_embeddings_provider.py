@@ -9,7 +9,7 @@ from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, 
 
 def make_dummy_embeddings_provider(max_length=10, embedding_length=768, **kwargs) -> EmbeddingsProvider:
     tokenizer = DummyTokenizer(max_length)
-    text_encoder = DummyTransformer(embedding_length=embedding_length)
+    text_encoder = DummyTransformer(text_model_max_length=max_length, embedding_length=embedding_length)
     return EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder, **kwargs)
 
 BOS = len(KNOWN_WORDS)

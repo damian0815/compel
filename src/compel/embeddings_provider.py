@@ -310,9 +310,9 @@ class EmbeddingsProvider:
             if include_start_and_end_markers:
                 token_ids = self.bos_sequence + token_ids + self.eos_sequence
 
-            if padding == 'max_length':
+            if padding == 'max_length' and len(token_ids) % self.max_token_count != 0:
                 padding_token_count = self.max_token_count - (len(token_ids)%self.max_token_count)
-                token_ids = token_ids + [self.tokenizer.pad_token_type_id] * padding_token_count
+                token_ids = token_ids + [self.tokenizer.pad_token_id] * padding_token_count
 
             result.append(token_ids)
 
