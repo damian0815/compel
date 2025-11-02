@@ -19,10 +19,10 @@ class LabelledConditioning:
 
 
 class CompelForSD:
-    def __init__(self, pipe: StableDiffusionPipeline, textual_inversion_manager: Optional[BaseTextualInversionManager]=None):
+    def __init__(self, pipe: StableDiffusionPipeline, textual_inversion_manager: Optional[BaseTextualInversionManager]=None, device: Optional[str]=None):
         self.compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder,
                              textual_inversion_manager=textual_inversion_manager,
-                             truncate_long_prompts=False)
+                             truncate_long_prompts=False, device=device)
 
     def disable_no_weights_bypass(self):
         self.compel.disable_no_weights_bypass()
@@ -45,13 +45,13 @@ class CompelForSD:
 
 
 class CompelForFlux:
-    def __init__(self, pipe: FluxPipeline, textual_inversion_manager: Optional[BaseTextualInversionManager]=None):
+    def __init__(self, pipe: FluxPipeline, textual_inversion_manager: Optional[BaseTextualInversionManager]=None, device: Optional[str]=None):
         self.compel_1 = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder,
                                returned_embeddings_type=ReturnedEmbeddingsType.POOLED,
                                textual_inversion_manager=textual_inversion_manager,
-                               truncate_long_prompts=True)
+                               truncate_long_prompts=True, device=device)
         self.compel_2 = Compel(tokenizer=pipe.tokenizer_2, text_encoder=pipe.text_encoder_2,
-                               truncate_long_prompts=True)
+                               truncate_long_prompts=True, device=device)
 
     def disable_no_weights_bypass(self):
         self.compel_1.disable_no_weights_bypass()
@@ -92,17 +92,17 @@ class CompelForFlux:
 
 
 class CompelForSDXL:
-    def __init__(self, pipe: StableDiffusionXLPipeline, textual_inversion_manager: Optional[BaseTextualInversionManager]=None):
+    def __init__(self, pipe: StableDiffusionXLPipeline, textual_inversion_manager: Optional[BaseTextualInversionManager]=None, device: Optional[str]=None):
         self.compel_1 = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder,
                                returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
                                textual_inversion_manager=textual_inversion_manager,
-                               truncate_long_prompts=False
+                               truncate_long_prompts=False, device=device,
                                )
         self.compel_2 = Compel(tokenizer=pipe.tokenizer_2, text_encoder=pipe.text_encoder_2,
                                returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
                                textual_inversion_manager=textual_inversion_manager,
                                truncate_long_prompts=False,
-                               requires_pooled=True,
+                               requires_pooled=True, device=device,
                                )
 
     def disable_no_weights_bypass(self):
