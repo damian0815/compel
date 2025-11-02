@@ -180,6 +180,8 @@ See https://github.com/damian0815/compel/issues/24 for more details. Thanks @ksh
 
 ## Changelog
 
+#### 2.3.1 - Fix for 78 tokens / 77 tokens issue with SDXL; add `device` arg to `CompelFor*` constructors (thanks @dx2-66)
+
 ### 2.3.0 - Tokenization info, SplitLongTextMode CLS token handling, negative/style bugfixes
 
 * `CompelFor*` objects now return tokenization info via `conditioning.tokenization_info` dict, which contains keys for `main_positive` and (where appropriate) `main_negative`, `style_positive` and `style_negative`.
