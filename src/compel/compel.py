@@ -231,11 +231,11 @@ class Compel:
                 tokenizations.append(this_tokens)
             options.update(this_options)  # this is not a smart way to do this but 🤷‍
             weight = conjunction.weights[i]
-            if weight != 1:
-                # apply weight if we need to
-                empty_conditioning = self.build_conditioning_tensor('') if empty_conditioning is None else empty_conditioning
-                [padded_empty_conditioning, _] = self.pad_conditioning_tensors_to_same_length([empty_conditioning, this_conditioning])
-                this_conditioning = padded_empty_conditioning + (this_conditioning - padded_empty_conditioning) * weight
+            if empty_conditioning is None:
+                empty_conditioning = self.build_conditioning_tensor('')
+                if isinstance(empty_conditioning, tuple): empty_conditioning = empty_conditioning[0] # discard pooled
+            [padded_empty_conditioning, _] = self.pad_conditioning_tensors_to_same_length([empty_conditioning, this_conditioning])
+            this_conditioning = padded_empty_conditioning + (this_conditioning - padded_empty_conditioning) * weight
             to_concat.append(this_conditioning)
         assert all(len(c.shape) == len(to_concat[0].shape) for c in to_concat)
         if len(to_concat[0].shape) == 2:
