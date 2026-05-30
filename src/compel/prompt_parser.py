@@ -595,7 +595,7 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
         keyword  # flag
     ]))
     # options for an operator, eg "s_start=0.1, 0.3, no_normalize"
-    options = pp.Dict(pp.Optional(pp.delimited_list(option)))
+    options = pp.Dict(pp.Optional(pp.DelimitedList(option)))
     options.set_name('options')
     options.set_debug(False)
 
@@ -663,7 +663,7 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
     # a blend/lerp between the feature vectors for two or more prompts
     blend = (
         lparen
-        + pp.Group(pp.delimited_list(pp.Group(potential_operator_target | quoted_prompt), min=1)).set_name('bl-target').set_debug(False)
+        + pp.Group(pp.DelimitedList(pp.Group(potential_operator_target | quoted_prompt), min=1)).set_name('bl-target').set_debug(False)
         + rparen
         + pp.Literal(".blend").set_name('bl-operator').set_debug(False)
         + lparen
@@ -677,7 +677,7 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
     # an operator to direct stable diffusion to step multiple times, once for each target, and then add the results together with different weights
     explicit_conjunction = (
         lparen
-        + pp.Group(pp.delimited_list(pp.Group(potential_operator_target | quoted_prompt), min=1)).set_name('cj-target').set_debug(False)
+        + pp.Group(pp.DelimitedList(pp.Group(potential_operator_target | quoted_prompt), min=1)).set_name('cj-target').set_debug(False)
         + rparen
         + pp.one_of([".and", ".add"]).set_name('cj-operator').set_debug(False)
         + lparen
@@ -696,4 +696,3 @@ def build_parser_syntax(attention_plus_base: float, attention_minus_base: float)
     conjunction = (explicit_conjunction | implicit_conjunction)
 
     return conjunction, prompt
-

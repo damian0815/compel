@@ -3,7 +3,6 @@ from typing import Union, List, Optional, Any, Callable
 
 import torch
 from diffusers import FluxPipeline, StableDiffusionXLPipeline, StableDiffusionPipeline
-from networkx.algorithms.shortest_paths.weighted import negative_edge_cycle
 
 import compel.embeddings_provider
 from compel import Compel, ReturnedEmbeddingsType, BaseTextualInversionManager

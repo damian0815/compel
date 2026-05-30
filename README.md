@@ -13,6 +13,11 @@ Note that cross-attention control `.swap()` is currently ignored by Compel, but 
 
 `pip install compel`
 
+Current main-branch support targets:
+
+- Python `>=3.10`
+- `transformers >=5,<6`
+
 ## Documentation
 
 Documentation is [here](doc/).
@@ -60,7 +65,7 @@ negative_prompt = "blurry, low quality, deformed"
 conditioning = compel(prompt, negative_prompt=negative_prompt)
 
 # generate image
-images = pipeline(prompt_embeds=conditioning.embeds, negative_prompt_embed=conditioning.negative_embeds, num_inference_steps=20).images
+images = pipeline(prompt_embeds=conditioning.embeds, negative_prompt_embeds=conditioning.negative_embeds, num_inference_steps=20).images
 images[0].save("image.jpg")
 ```
 
@@ -79,7 +84,7 @@ negative_prompt = ["blurry, low quality, deformed", "painting"]
 conditioning = compel(prompt, negative_prompt=negative_prompt)
 
 # generate image
-images = pipeline(prompt_embeds=conditioning.embeds, negative_prompt_embed=conditioning.negative_embeds, num_inference_steps=20).images
+images = pipeline(prompt_embeds=conditioning.embeds, negative_prompt_embeds=conditioning.negative_embeds, num_inference_steps=20).images
 images[0].save("image.jpg")
 ```
 
@@ -178,9 +183,25 @@ If this doesn't help, you could try this advice offered by @kshieh1:
 
 See https://github.com/damian0815/compel/issues/24 for more details. Thanks @kshieh1 !
 
+## Local Checkpoint Smoke Tests
+
+The default test suite uses tiny local diffusers components so it stays fast and CI-friendly.
+
+If you want to validate real local SDXL `.safetensors` checkpoints with `StableDiffusionXLPipeline.from_single_file(...)`,
+run:
+
+```bash
+COMPEL_RUN_LOCAL_CHECKPOINT_TESTS=1 python -m unittest test.test_diffusers_smoke -v
+```
+
+This opt-in path only uses local files and does not pull remote model weights.
+
 ## Changelog
 
 #### 2.3.1 - Fix for 78 tokens / 77 tokens issue with SDXL; add `device` arg to `CompelFor*` constructors (thanks @dx2-66)
+
+Current main-branch validation also includes opt-in local SDXL `.safetensors` single-file smoke tests for
+`StableDiffusionXLPipeline.from_single_file(...)`; see `COMPEL_RUN_LOCAL_CHECKPOINT_TESTS=1` above.
 
 ### 2.3.0 - Tokenization info, SplitLongTextMode CLS token handling, negative/style bugfixes
 
@@ -352,4 +373,3 @@ negative_conditioning = compel.build_conditioning_tensor(negative_prompt)
 #### 0.1.8 - downgrade Python min version to 3.7
 
 #### 0.1.7 - InvokeAI compatibility
-

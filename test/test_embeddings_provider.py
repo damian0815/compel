@@ -3,7 +3,7 @@ import unittest
 
 import torch
 
-from src.compel.embeddings_provider import EmbeddingsProvider, DownweightMode, SplitLongTextMode
+from compel.embeddings_provider import EmbeddingsProvider, DownweightMode, ReturnedEmbeddingsType, SplitLongTextMode
 from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS, NullTransformer
 
 
@@ -15,6 +15,45 @@ def make_dummy_embeddings_provider(max_length=10, embedding_length=768, **kwargs
 BOS = len(KNOWN_WORDS)
 PAD = BOS + 1
 EOS = BOS + 2
+
+
+class DummyTransformerWithPoolerOutput(DummyTransformer):
+    def forward(self, input_ids: torch.Tensor, attention_mask=None, output_hidden_states: bool = False, return_dict: bool = True):
+        output = super().forward(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        output.pooler_output = output.last_hidden_state[:, 0, :]
+        return output
+
+
+class DummyT5Tokenizer(DummyTokenizer):
+    def __call__(self, fragments, **kwargs):
+        tokenized = [
+            [self.tokens.index(w) for w in fragment.split(" ")] + [self.eos_token_id]
+            if len(fragment) > 0
+            else [self.eos_token_id]
+            for fragment in fragments
+        ]
+        default_truncation = False
+        if kwargs.get("truncation", default_truncation):
+            max_length = kwargs.get("max_length", self.model_max_length)
+            tokenized = [x[0 : max_length - 1] + [self.eos_token_id] if len(x) > max_length else x for x in tokenized]
+        padding_strategy = kwargs.get("padding", "do_not_pad")
+        if padding_strategy not in ["do_not_pad", "max_length"]:
+            raise Exception(
+                "for unit tests only 'do_not_pad' and 'max_length' is supported "
+                f"as a padding strategy (got '{padding_strategy}')"
+            )
+
+        if padding_strategy == "max_length":
+            tokenized = [
+                tokens[:-1] + (self.model_max_length - len(tokens)) * [self.pad_token_id] + tokens[-1:] for tokens in tokenized
+            ]
+
+        return {"input_ids": tokenized}
 
 class EmbeddingsProviderTestCase(unittest.TestCase):
 
@@ -207,6 +246,73 @@ class EmbeddingsProviderTestCase(unittest.TestCase):
         #print(expected_token_ids_with_bos_eos)
         token_ids = ep.get_token_ids(prompts, include_start_and_end_markers=True, truncation_override=False)
         self.assertEqual(expected_token_ids_with_bos_eos, token_ids)
+
+    def test_get_token_ids_for_bosless_t5_style_tokenizer(self):
+        tokenizer = DummyT5Tokenizer(model_max_length=6)
+        tokenizer.bos_token_id = None
+        ep = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=DummyTransformer(text_model_max_length=6))
+
+        token_ids = ep.get_token_ids(["a b c"], include_start_and_end_markers=False, truncation_override=False)
+        self.assertEqual([[0, 1, 2]], token_ids)
+
+        token_ids_with_markers = ep.get_token_ids(["a b c"], include_start_and_end_markers=True, truncation_override=False)
+        self.assertEqual([[0, 1, 2, tokenizer.eos_token_id]], token_ids_with_markers)
+
+    def test_chunking_for_bosless_t5_style_tokenizer(self):
+        tokenizer = DummyT5Tokenizer(model_max_length=6)
+        tokenizer.bos_token_id = None
+        ep = EmbeddingsProvider(
+            tokenizer=tokenizer,
+            text_encoder=DummyTransformer(text_model_max_length=6),
+            truncate=False,
+            padding_attention_mask_value=0,
+        )
+
+        token_ids_tensor, weights_tensor, mask = ep.get_token_ids_and_expand_weights(["a b c a b c a"], weights=[1.5], device="cpu")
+
+        self.assertTrue(
+            torch.equal(
+                token_ids_tensor,
+                torch.tensor([0, 1, 2, 0, 1, EOS, 2, 0, EOS, PAD, PAD, PAD], dtype=torch.int64),
+            )
+        )
+        self.assertTrue(torch.equal(weights_tensor, torch.tensor([1.5] * 5 + [1.0] + [1.5] * 2 + [1.0] + [1.0] * 3)))
+        self.assertTrue(torch.equal(mask, torch.tensor([1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0])))
+
+    def test_pooled_embeddings_use_pooler_output_when_present(self):
+        tokenizer = DummyTokenizer(model_max_length=5)
+        text_encoder = DummyTransformerWithPoolerOutput(text_model_max_length=5, embedding_length=7)
+        ep = EmbeddingsProvider(
+            tokenizer=tokenizer,
+            text_encoder=text_encoder,
+            returned_embeddings_type=ReturnedEmbeddingsType.POOLED,
+        )
+
+        pooled = ep.get_pooled_embeddings(["a b"], device="cpu")
+        token_ids = torch.tensor([[BOS, 0, 1, PAD, EOS]], dtype=torch.long)
+        expected = text_encoder(token_ids).pooler_output
+
+        self.assertEqual((1, 7), pooled.shape)
+        self.assertTrue(torch.allclose(expected, pooled, atol=1e-7))
+
+    def test_pooled_prompt_fragments_return_tokens_for_text_embeds_models(self):
+        tokenizer = DummyTokenizer(model_max_length=5)
+        text_encoder = DummyTransformer(text_model_max_length=5, embedding_length=7)
+        ep = EmbeddingsProvider(
+            tokenizer=tokenizer,
+            text_encoder=text_encoder,
+            returned_embeddings_type=ReturnedEmbeddingsType.POOLED,
+        )
+
+        pooled, token_ids = ep.get_embeddings_for_weighted_prompt_fragments(
+            [["a b"]],
+            [[1.0]],
+            should_return_tokens=True,
+            device="cpu",
+        )
+
+        self.assertEqual((1, 7), pooled.shape)
+        self.assertTrue(torch.equal(token_ids, torch.tensor([[BOS, 0, 1, EOS, PAD]], dtype=torch.long)))
 
 
     def test_build_weighted_embeddings_tensor(self):
