@@ -198,6 +198,8 @@ This opt-in path only uses local files and does not pull remote model weights.
 
 ## Changelog
 
+### 2.4.0 - Upgrade to Transformers 5, drop support for Python < 3.10 (thanks @Cstannahill for the PR, and thanks to everybody else for the patience)
+
 #### 2.3.1 - Fix for 78 tokens / 77 tokens issue with SDXL; add `device` arg to `CompelFor*` constructors (thanks @dx2-66)
 
 Current main-branch validation also includes opt-in local SDXL `.safetensors` single-file smoke tests for
