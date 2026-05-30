@@ -1,4 +1,4 @@
-pyparsing
+pyparsing~=3.0
 torch
-transformers
+transformers>=5,<6
 diffusers

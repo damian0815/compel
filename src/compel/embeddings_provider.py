@@ -281,6 +281,10 @@ class EmbeddingsProvider:
         """
         # for args documentation of self.tokenizer() see ENCODE_KWARGS_DOCSTRING in tokenization_utils_base.py
         # (part of `transformers` lib)
+
+        if padding not in ['do_not_pad', 'max_length']:
+            raise ValueError(f"unsupported padding mode: {padding}")
+
         truncation = self.truncate_to_model_max_length if truncation_override is None else truncation_override
         token_ids_list = self.tokenizer(
             texts,
@@ -299,10 +303,16 @@ class EmbeddingsProvider:
             # pad for textual inversions with vector length >1
             if self.textual_inversion_manager is not None:
                 token_ids = self.textual_inversion_manager.expand_textual_inversion_token_ids_if_necessary(token_ids)
+                if truncation:
+                    token_ids = token_ids[:self.max_token_count - len(self.bos_sequence) - len(self.eos_sequence)]
 
             # add back eos/bos if requested
             if include_start_and_end_markers:
                 token_ids = self.bos_sequence + token_ids + self.eos_sequence
+
+            if padding == 'max_length' and len(token_ids) % self.max_token_count != 0:
+                padding_token_count = self.max_token_count - (len(token_ids)%self.max_token_count)
+                token_ids = token_ids + [self.tokenizer.pad_token_id] * padding_token_count
 
             result.append(token_ids)
 
@@ -381,13 +391,13 @@ class EmbeddingsProvider:
 
         def find_split_point(tokens_text: List[str], mode: SplitLongTextMode) -> Optional[int]:
             for index, token in reversed(list(enumerate(tokens_text[:max_length]))):
-                if mode == SplitLongTextMode.WORDS and token.endswith('</w>'):
+                if SplitLongTextMode.WORDS in mode and token.endswith('</w>'):
                     #print('found word end at', index, ':', tokens_text[max(0, index-5):index])
                     return index
-                elif mode == SplitLongTextMode.PHRASES and token in phrase_separating_punctuation:
+                elif SplitLongTextMode.PHRASES in mode and token in phrase_separating_punctuation:
                     #print('found phrase end at', index, ':', tokens_text[max(0, index-5):index])
                     return index
-                elif mode == SplitLongTextMode.SENTENCES and token in sentence_separating_punctuation:
+                elif SplitLongTextMode.SENTENCES in mode and token in sentence_separating_punctuation:
                     #print('found sentence end at', index, ':', tokens_text[max(0, index-5):index])
                     return index
             return None
