@@ -350,7 +350,7 @@ class Compel:
         conditionings_to_blend = []
         tokenizations = []
         for i, flattened_prompt in enumerate(blend.prompts):
-            this_conditioning, tokenization = self._get_conditioning_for_flattened_prompt(flattened_prompt, should_return_tokens=True)
+            this_conditioning, tokenization = self._get_conditioning_for_flattened_prompt(flattened_prompt)
             conditionings_to_blend.append(this_conditioning)
             tokenizations.append(tokenization)
         conditionings_to_blend = self.pad_conditioning_tensors_to_same_length(conditionings_to_blend)
@@ -407,18 +407,14 @@ class Compel:
         edit_options.append(None)
         original_token_count += 1
         edited_token_count += 1
-        original_embeddings, original_tokens = self._get_conditioning_for_flattened_prompt(
-            original_prompt, should_return_tokens=True
-        )
+        original_embeddings, original_tokens = self._get_conditioning_for_flattened_prompt(original_prompt)
         # naïvely building a single edited_embeddings like this disregards the effects of changing the absolute location of
         # subsequent tokens when there is >1 edit and earlier edits change the total token count.
         # eg "a cat.swap(smiling dog, s_start=0.5) eating a hotdog.swap(pizza)" - when the 'pizza' edit is active but the
         # 'cat' edit is not, the 'pizza' feature vector will nevertheless be affected by the introduction of the extra
         # token 'smiling' in the inactive 'cat' edit.
         # todo: build multiple edited_embeddings, one for each edit, and pass just the edited fragments through to the CrossAttentionControl functions
-        edited_embeddings, edited_tokens = self._get_conditioning_for_flattened_prompt(
-            edited_prompt, should_return_tokens=True
-        )
+        edited_embeddings, edited_tokens = self._get_conditioning_for_flattened_prompt(edited_prompt)
         [original_conditioning, edited_conditioning] = self.pad_conditioning_tensors_to_same_length(
             [original_embeddings, edited_embeddings])
         cac_args = cross_attention_control.Arguments(
