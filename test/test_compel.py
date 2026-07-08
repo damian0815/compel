@@ -300,6 +300,42 @@ class CompelTestCase(unittest.TestCase):
         embeds_concat = compel('("a b c a b c a b c", "b a").and()')
         self.assertTrue(torch.allclose(embeds_concat, embeds_separate))
 
+    def test_blend_prompt(self):
+        # regression test for https://github.com/damian0815/compel/issues/130 -
+        # _get_conditioning_for_blend() used to pass a stale should_return_tokens=True
+        # kwarg to _get_conditioning_for_flattened_prompt(), which raised a TypeError.
+        tokenizer = DummyTokenizer()
+        text_encoder = DummyTransformer()
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
+
+        prompt = '("a b", "b c").blend(0.5, 0.5)'
+        conditioning = compel(prompt)
+        self.assertEqual(conditioning.shape, (1, tokenizer.model_max_length, text_encoder.embedding_length))
+
+    def test_cross_attention_control_swap_prompt(self):
+        # regression test for https://github.com/damian0815/compel/issues/130 -
+        # _get_conditioning_for_cross_attention_control() used to pass a stale
+        # should_return_tokens=True kwarg to _get_conditioning_for_flattened_prompt(),
+        # which raised a TypeError.
+        tokenizer = DummyTokenizer()
+        text_encoder = DummyTransformer()
+        compel = Compel(tokenizer=tokenizer, text_encoder=text_encoder)
+
+        prompt = "a b.swap(c)"
+        conjunction = compel.parse_prompt_string(prompt)
+        flattened_prompt = conjunction.prompts[0]
+        self.assertTrue(flattened_prompt.wants_cross_attention_control)
+
+        cac_args = compel._get_conditioning_for_cross_attention_control(flattened_prompt)
+        self.assertEqual(cac_args.original_conditioning.shape,
+                         (1, tokenizer.model_max_length, text_encoder.embedding_length))
+        self.assertEqual(cac_args.edited_conditioning.shape,
+                         (1, tokenizer.model_max_length, text_encoder.embedding_length))
+
+        # also exercise the full call path through build_conditioning_tensor_for_prompt_object
+        conditioning = compel(prompt)
+        self.assertEqual(conditioning.shape, (1, tokenizer.model_max_length, text_encoder.embedding_length))
+
     def test_end_to_end_split(self):
 
         max_length = 5
