@@ -3,7 +3,7 @@ from unittest.mock import MagicMock
 
 import torch
 
-from compel import Compel, CompelForSD, CompelForSDXL
+from compel import Compel, CompelForSD, CompelForSDXL, CompelForLumina2, CompelForSana
 
 from prompting_test_utils import DummyTokenizer, DummyTransformer
 
@@ -77,6 +77,68 @@ class SmokeTestCase(unittest.TestCase):
 
         self.assertEqual(conditioning.embeds.shape, (1, 5, 2048))
         self.assertEqual(conditioning.pooled_embeds.shape, (1, 768))
+
+    def test_compel_for_lumina2_wrapper_with_negative_prompt(self):
+        pipeline = MagicMock()
+        pipeline.tokenizer = DummyTokenizer(model_max_length=5)
+        pipeline.text_encoder = DummyTransformer(text_model_max_length=5)
+
+        conditioning = CompelForLumina2(pipeline, system_prompt="", max_sequence_length=5)("a b c", negative_prompt="a")
+
+        self.assertEqual(conditioning.embeds.shape, (1, 5, 768))
+        self.assertEqual(conditioning.negative_embeds.shape, (1, 5, 768))
+        self.assertEqual(conditioning.attention_mask.shape, (1, 5))
+        self.assertEqual(conditioning.negative_attention_mask.shape, (1, 5))
+        self.assertIsNone(conditioning.pooled_embeds)
+        self.assertIsNone(conditioning.negative_pooled_embeds)
+
+        # masks are 1 at non-pad positions and 0 at pad positions
+        self.assertEqual(conditioning.attention_mask[0, 0].item(), 1)
+        self.assertEqual(conditioning.negative_attention_mask[0, 0].item(), 1)
+        # all positions in these prompts are real tokens, so no padding
+        self.assertEqual(conditioning.attention_mask.sum().item(), 5)
+        self.assertEqual(conditioning.negative_attention_mask.sum().item(), 5)
+
+        # a prompt short enough to leave padding gets masked out at the pad position
+        conditioning_with_padding = CompelForLumina2(pipeline, system_prompt="", max_sequence_length=5)(
+            "a b c", negative_prompt="")
+        self.assertEqual(conditioning_with_padding.negative_attention_mask[0, 0].item(), 1)
+        self.assertEqual(conditioning_with_padding.negative_attention_mask[0, -1].item(), 0)
+
+    def test_compel_for_lumina2_wrapper_without_negative_prompt(self):
+        pipeline = MagicMock()
+        pipeline.tokenizer = DummyTokenizer(model_max_length=5)
+        pipeline.text_encoder = DummyTransformer(text_model_max_length=5)
+
+        conditioning = CompelForLumina2(pipeline, system_prompt="", max_sequence_length=5)("a b c")
+
+        self.assertEqual(conditioning.embeds.shape, (1, 5, 768))
+        self.assertEqual(conditioning.attention_mask.shape, (1, 5))
+        self.assertIsNone(conditioning.negative_embeds)
+        self.assertIsNone(conditioning.negative_attention_mask)
+
+    def test_compel_for_sana_wrapper_with_negative_prompt(self):
+        pipeline = MagicMock()
+        pipeline.tokenizer = DummyTokenizer(model_max_length=5)
+        pipeline.text_encoder = DummyTransformer(text_model_max_length=5)
+
+        conditioning = CompelForSana(pipeline, max_sequence_length=5)("a b c", negative_prompt="a")
+
+        self.assertEqual(conditioning.embeds.shape, (1, 5, 768))
+        self.assertEqual(conditioning.negative_embeds.shape, (1, 5, 768))
+        self.assertEqual(conditioning.attention_mask.shape, (1, 5))
+        self.assertEqual(conditioning.negative_attention_mask.shape, (1, 5))
+        self.assertIsNone(conditioning.pooled_embeds)
+        self.assertIsNone(conditioning.negative_pooled_embeds)
+
+        self.assertEqual(conditioning.attention_mask[0, 0].item(), 1)
+        self.assertEqual(conditioning.negative_attention_mask[0, 0].item(), 1)
+
+        # the wrapper lowercases and strips prompts
+        lowercased = CompelForSana(pipeline, max_sequence_length=5)("a b c")
+        uppercased = CompelForSana(pipeline, max_sequence_length=5)("A B C")
+        self.assertTrue(torch.allclose(lowercased.embeds, uppercased.embeds))
+        self.assertTrue(torch.equal(lowercased.attention_mask, uppercased.attention_mask))
 
     def test_t5_backed_path_if_supported(self):
         tokenizer = DummyT5Tokenizer(model_max_length=6)

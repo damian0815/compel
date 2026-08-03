@@ -4,10 +4,13 @@ import unittest
 from pathlib import Path
 
 import torch
-from diffusers import AutoencoderKL, EulerDiscreteScheduler, StableDiffusionPipeline, StableDiffusionXLPipeline, UNet2DConditionModel
-from transformers import CLIPTextConfig, CLIPTextModel, CLIPTextModelWithProjection
+from diffusers import AutoencoderDC, AutoencoderKL, DDPMScheduler, EulerDiscreteScheduler, FlowMatchEulerDiscreteScheduler, \
+    Lumina2Pipeline, Lumina2Transformer2DModel, SanaPipeline, SanaTransformer2DModel, StableDiffusionPipeline, \
+    StableDiffusionXLPipeline, UNet2DConditionModel
+from transformers import CLIPTextConfig, CLIPTextModel, CLIPTextModelWithProjection, Gemma2Config, Gemma2ForCausalLM, \
+    Gemma2Model
 
-from compel import CompelForSD, CompelForSDXL
+from compel import CompelForLumina2, CompelForSana, CompelForSD, CompelForSDXL
 
 try:
     from prompting_test_utils import DummyTokenizer
@@ -84,6 +87,90 @@ def make_tiny_sdxl_unet(cross_attention_dim: int, projection_dim: int) -> UNet2D
     )
 
 
+def make_tiny_gemma2_config() -> Gemma2Config:
+    return Gemma2Config(
+        vocab_size=32,
+        hidden_size=32,
+        intermediate_size=37,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=8,
+        max_position_embeddings=256,
+        sliding_window=64,
+        bos_token_id=10,
+        pad_token_id=11,
+        eos_token_id=12,
+    )
+
+
+def make_tiny_lumina2_transformer() -> Lumina2Transformer2DModel:
+    return Lumina2Transformer2DModel(
+        sample_size=32,
+        patch_size=1,
+        in_channels=4,
+        out_channels=4,
+        hidden_size=24,
+        num_layers=1,
+        num_refiner_layers=1,
+        num_attention_heads=4,
+        num_kv_heads=2,
+        multiple_of=16,
+        ffn_dim_multiplier=1.0,
+        norm_eps=1e-6,
+        axes_dim_rope=(2, 2, 2),
+        axes_lens=(256, 256, 256),
+        cap_feat_dim=32,
+    )
+
+
+def make_tiny_sana_transformer() -> SanaTransformer2DModel:
+    return SanaTransformer2DModel(
+        in_channels=4,
+        out_channels=4,
+        num_attention_heads=4,
+        attention_head_dim=8,
+        num_layers=1,
+        num_cross_attention_heads=4,
+        cross_attention_head_dim=8,
+        cross_attention_dim=32,
+        caption_channels=32,
+        mlp_ratio=2.0,
+        dropout=0.0,
+        attention_bias=False,
+        sample_size=32,
+        patch_size=1,
+        norm_elementwise_affine=False,
+        norm_eps=1e-6,
+        guidance_embeds=False,
+        timestep_scale=1.0,
+    )
+
+
+def make_tiny_autoencoder_dc() -> AutoencoderDC:
+    return AutoencoderDC(
+        in_channels=3,
+        latent_channels=4,
+        attention_head_dim=4,
+        encoder_block_types=("ResBlock",),
+        decoder_block_types=("ResBlock",),
+        encoder_block_out_channels=(4,),
+        decoder_block_out_channels=(4,),
+        encoder_layers_per_block=(1,),
+        decoder_layers_per_block=(1,),
+        encoder_qkv_multiscales=(1,),
+        decoder_qkv_multiscales=(1,),
+        upsample_block_type="Upsample2D",
+        downsample_block_type="Downsample2D",
+        decoder_norm_types=("rms_norm",),
+        decoder_act_fns=("silu",),
+        encoder_out_shortcut=True,
+        decoder_in_shortcut=True,
+        decoder_conv_act_fn="relu",
+        scaling_factor=0.1,
+    )
+
+
 class DiffusersSmokeTestCase(unittest.TestCase):
     def test_stable_diffusion_pipeline_accepts_compel_prompt_embeds(self):
         tokenizer = DummyTokenizer(model_max_length=16)
@@ -153,6 +240,76 @@ class DiffusersSmokeTestCase(unittest.TestCase):
         self.assertEqual(conditioning.pooled_embeds.shape, (1, 16))
         self.assertEqual(conditioning.negative_embeds.shape, (1, 16, 64))
         self.assertEqual(conditioning.negative_pooled_embeds.shape, (1, 16))
+        self.assertEqual(len(result.images), 1)
+        self.assertEqual(result.images[0].shape, (32, 32, 3))
+
+    def test_lumina2_pipeline_accepts_compel_prompt_embeds(self):
+        tokenizer = DummyTokenizer(model_max_length=16)
+        text_encoder = Gemma2ForCausalLM(make_tiny_gemma2_config())
+        vae = make_tiny_vae()
+        vae.config.shift_factor = 0.0
+        vae.config.scaling_factor = 0.1
+        pipe = Lumina2Pipeline(
+            transformer=make_tiny_lumina2_transformer(),
+            scheduler=FlowMatchEulerDiscreteScheduler(num_train_timesteps=10),
+            vae=vae,
+            text_encoder=text_encoder,
+            tokenizer=tokenizer,
+        ).to("cpu")
+        pipe.set_progress_bar_config(disable=True)
+
+        conditioning = CompelForLumina2(pipe, max_sequence_length=16)("a b c", negative_prompt="a")
+        result = pipe(
+            prompt_embeds=conditioning.embeds,
+            prompt_attention_mask=conditioning.attention_mask,
+            negative_prompt_embeds=conditioning.negative_embeds,
+            negative_prompt_attention_mask=conditioning.negative_attention_mask,
+            num_inference_steps=1,
+            guidance_scale=2.0,
+            output_type="np",
+            max_sequence_length=16,
+        )
+
+        self.assertEqual(conditioning.embeds.shape, (1, 16, 32))
+        self.assertEqual(conditioning.attention_mask.shape, (1, 16))
+        self.assertEqual(conditioning.negative_embeds.shape, (1, 16, 32))
+        self.assertEqual(conditioning.negative_attention_mask.shape, (1, 16))
+        self.assertEqual(len(result.images), 1)
+        self.assertEqual(result.images[0].shape, (32, 32, 3))
+
+    def test_sana_pipeline_accepts_compel_prompt_embeds(self):
+        tokenizer = DummyTokenizer(model_max_length=16)
+        text_encoder = Gemma2Model(make_tiny_gemma2_config())
+        pipe = SanaPipeline(
+            transformer=make_tiny_sana_transformer(),
+            scheduler=DDPMScheduler(num_train_timesteps=10),
+            vae=make_tiny_autoencoder_dc(),
+            text_encoder=text_encoder,
+            tokenizer=tokenizer,
+        ).to("cpu")
+        pipe.set_progress_bar_config(disable=True)
+
+        conditioning = CompelForSana(pipe, max_sequence_length=16)("a b c", negative_prompt="a")
+        result = pipe(
+            prompt_embeds=conditioning.embeds,
+            prompt_attention_mask=conditioning.attention_mask,
+            negative_prompt_embeds=conditioning.negative_embeds,
+            negative_prompt_attention_mask=conditioning.negative_attention_mask,
+            negative_prompt=None,
+            prompt=None,
+            height=32,
+            width=32,
+            use_resolution_binning=False,
+            num_inference_steps=1,
+            guidance_scale=2.0,
+            output_type="np",
+            max_sequence_length=16,
+        )
+
+        self.assertEqual(conditioning.embeds.shape, (1, 16, 32))
+        self.assertEqual(conditioning.attention_mask.shape, (1, 16))
+        self.assertEqual(conditioning.negative_embeds.shape, (1, 16, 32))
+        self.assertEqual(conditioning.negative_attention_mask.shape, (1, 16))
         self.assertEqual(len(result.images), 1)
         self.assertEqual(result.images[0].shape, (32, 32, 3))
 

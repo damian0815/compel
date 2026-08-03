@@ -132,6 +132,58 @@ images = pipe(prompt_embeds=conditioning.embeds, pooled_prompt_embeds=conditioni
              num_inference_steps=4, width=512, height=512, generator=generator)
 ```
 
+### Lumina2 (Gemma2 text encoder)
+
+`CompelForLumina2` handles the system prompt and returns both the prompt embeddings and the
+required attention masks:
+
+```python
+from diffusers import Lumina2Pipeline
+from compel import CompelForLumina2
+import torch
+
+device = "cuda"
+pipe = Lumina2Pipeline.from_pretrained("Alpha-VLLM/Lumina-Next-SFT-diffusers", torch_dtype=torch.bfloat16).to(device)
+compel = CompelForLumina2(pipe)
+
+prompt = "a cat playing with a ball++ in the forest"
+negative_prompt = "low quality, blurry"
+conditioning = compel(prompt, negative_prompt=negative_prompt)
+
+image = pipe(prompt_embeds=conditioning.embeds,
+             prompt_attention_mask=conditioning.attention_mask,
+             negative_prompt_embeds=conditioning.negative_embeds,
+             negative_prompt_attention_mask=conditioning.negative_attention_mask,
+             num_inference_steps=50, width=1024, height=1024,
+             generator=torch.Generator().manual_seed(42)).images[0]
+image.save("lumina2_image.jpg")
+```
+
+### SANA (Gemma2 text encoder)
+
+`CompelForSana` behaves the same way for Sana pipelines, minus the system prompt. Like the
+pipeline itself, it lowercases prompts before encoding.
+
+```python
+from diffusers import SanaPipeline
+from compel import CompelForSana
+import torch
+
+device = "cuda"
+pipe = SanaPipeline.from_pretrained("Efficient-Large-Model/Sana_600M_1024px_diffusers", torch_dtype=torch.float16).to(device)
+compel = CompelForSana(pipe)
+
+prompt = "a cat playing with a ball++ in the forest"
+conditioning = compel(prompt)
+
+image = pipe(prompt_embeds=conditioning.embeds,
+             prompt_attention_mask=conditioning.attention_mask,
+             num_inference_steps=20, guidance_scale=4.5,
+             height=1024, width=1024,
+             generator=torch.Generator().manual_seed(42)).images[0]
+image.save("sana_image.jpg")
+```
+
 ### Style prompt
 
 Works with SDXL or Flux:
@@ -197,6 +249,8 @@ COMPEL_RUN_LOCAL_CHECKPOINT_TESTS=1 python -m unittest test.test_diffusers_smoke
 This opt-in path only uses local files and does not pull remote model weights.
 
 ## Changelog
+
+### 2.5.0 - add Gemma2, CompelForSANA, CompelForLumina2
 
 ### 2.4.0 - Upgrade to Transformers 5, drop support for Python < 3.10 (thanks @Cstannahill for the PR, and thanks to everybody else for the patience)
 

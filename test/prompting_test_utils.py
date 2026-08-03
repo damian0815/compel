@@ -100,7 +100,12 @@ class DummyTokenizer():
         self.model_max_length = model_max_length
 
     def __call__(self, fragments, **kwargs):
-        tokenized = [[self.bos_token_id] + [self.tokens.index(w) for w in fragment.split(" ")] + [self.eos_token_id]
+        def tokenize_word(w):
+            try:
+                return self.tokens.index(w)
+            except ValueError:
+                return self.unk_token_id
+        tokenized = [[self.bos_token_id] + [tokenize_word(w) for w in fragment.split(" ")] + [self.eos_token_id]
                      if len(fragment)>0 else [self.bos_token_id] + [self.eos_token_id]
                                            for fragment in fragments]
         default_truncation = False

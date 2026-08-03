@@ -28,6 +28,7 @@ class Compel:
                  requires_pooled: Union[bool, List[bool]] = False,
                  split_long_text_mode: SplitLongTextMode = SplitLongTextMode.SENTENCES,
                  device: Optional[str] = None,
+                 model_max_length: Optional[int] = None,
                  ):
         """
         Initialize Compel.
@@ -52,6 +53,9 @@ class Compel:
         `requires_pooled`: for SDXL, append the pooled embeddings when returning conditioning tensors
         `device`: The torch device on which the tensors should be created. If a device is not specified, the device will
             be the same as that of the `text_encoder` at the moment when `build_conditioning_tensor()` is called.
+        `model_max_length`: Overrides the maximum token count used for truncation/chunking/padding. Defaults to
+            `tokenizer.model_max_length`. Useful for pipelines (e.g. Gemma2-backed) that mandate a fixed
+            `max_sequence_length`.
         """
         def count_matching_flags(flags_to_test):
             return sum(1 for f in flags_to_test if f in split_long_text_mode)
@@ -75,7 +79,8 @@ class Compel:
                                                             downweight_mode=downweight_mode,
                                                             returned_embeddings_type=returned_embeddings_type,
                                                             requires_pooled_mask=requires_pooled,
-                                                            split_long_text_mode=split_long_text_mode
+                                                            split_long_text_mode=split_long_text_mode,
+                                                            model_max_length=model_max_length,
             )
         else:
             self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
@@ -87,7 +92,8 @@ class Compel:
                                                             downweight_mode=downweight_mode,
                                                             returned_embeddings_type=returned_embeddings_type,
                                                             device=device,
-                                                            split_long_text_mode=split_long_text_mode
+                                                            split_long_text_mode=split_long_text_mode,
+                                                            model_max_length=model_max_length,
                                                             )
         self._device = device
         self.requires_pooled = requires_pooled

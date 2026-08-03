@@ -57,6 +57,16 @@ class DummyT5Tokenizer(DummyTokenizer):
 
 class EmbeddingsProviderTestCase(unittest.TestCase):
 
+    def test_model_max_length_override(self):
+        tokenizer = DummyTokenizer(model_max_length=77)
+        text_encoder = DummyTransformer(text_model_max_length=5)
+        ep = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=text_encoder, model_max_length=5)
+
+        embeddings = ep.get_embeddings_for_weighted_prompt_fragments([["a b c d e f"]], [[1.0]], device="cpu")
+
+        self.assertEqual(embeddings.shape, (1, 5, 768))
+        self.assertEqual(ep.max_token_count, 5)
+
     def test_tokenizing(self):
         tokenizer = DummyTokenizer(model_max_length=5)
         embeddings_provider = EmbeddingsProvider(tokenizer=tokenizer, text_encoder=NullTransformer(),

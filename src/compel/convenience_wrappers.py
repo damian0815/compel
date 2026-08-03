@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Union, List, Optional, Any, Callable
 
 import torch
-from diffusers import FluxPipeline, StableDiffusionXLPipeline, StableDiffusionPipeline
+from diffusers import FluxPipeline, Lumina2Pipeline, SanaPipeline, StableDiffusionXLPipeline, StableDiffusionPipeline
 
 import compel.embeddings_provider
 from compel import Compel, ReturnedEmbeddingsType, BaseTextualInversionManager
@@ -14,6 +14,8 @@ class LabelledConditioning:
     pooled_embeds: Union[torch.Tensor, None] = None
     negative_embeds: Union[torch.Tensor, None] = None
     negative_pooled_embeds: Union[torch.Tensor, None] = None
+    attention_mask: Union[torch.Tensor, None] = None
+    negative_attention_mask: Union[torch.Tensor, None] = None
     tokenization_info: dict[str, Any] = None
 
 
@@ -168,6 +170,98 @@ class CompelForSDXL:
                                     negative_pooled_embeds=negative_pooled_embeds,
                                     tokenization_info=tokenization_info,
                                     )
+
+
+class CompelForSana:
+    def __init__(self, pipe: SanaPipeline, textual_inversion_manager: Optional[BaseTextualInversionManager]=None, device: Optional[str]=None,
+                 max_sequence_length=300):
+        self.compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder,
+                             returned_embeddings_type=ReturnedEmbeddingsType.LAST_HIDDEN_STATES_NORMALIZED,
+                             textual_inversion_manager=textual_inversion_manager,
+                             truncate_long_prompts=True,
+                             padding_attention_mask_value=0,
+                             model_max_length=max_sequence_length,
+                             device=device,
+                             )
+
+    def disable_no_weights_bypass(self):
+        self.compel.disable_no_weights_bypass()
+
+    def __call__(self, prompt: Union[str, List[str]], negative_prompt: Union[None, str, List[str]] = None):
+        if type(prompt) is str:
+            prompt = [prompt]
+        if type(negative_prompt) is str:
+            negative_prompt = [negative_prompt]
+        prompt = [p.lower().strip() for p in prompt]
+        if negative_prompt is not None:
+            negative_prompt = [p.lower().strip() for p in negative_prompt]
+        input, negative_start_index = _make_compel_input_with_optional_negative(prompt, negative_prompt)
+        embeds, tokenizations = self.compel(input, return_tokenization=True)
+        provider = self.compel.conditioning_provider
+        attention_masks = _build_attention_masks(tokenizations, embeds.shape[1],
+                                                 provider.tokenizer.pad_token_id, provider.max_token_count)
+        embeds, negative_embeds = _split_embeds_and_pad_negative(embeds, negative_start_index)
+        attention_masks, negative_attention_masks = _split_embeds_and_pad_negative(attention_masks, negative_start_index)
+        tokenization_info = _build_tokenization_info(tokenizations, negative_start_index, prefix='main_')
+        return LabelledConditioning(embeds=embeds, attention_mask=attention_masks,
+                                    negative_embeds=negative_embeds,
+                                    negative_attention_mask=negative_attention_masks,
+                                    tokenization_info=tokenization_info)
+
+
+DEFAULT_LUMINA2_SYSTEM_PROMPT = "You are an assistant designed to generate superior images with the superior degree of image-text alignment based on textual prompts or user prompts."
+
+
+class CompelForLumina2:
+    def __init__(self, pipe: Lumina2Pipeline, textual_inversion_manager: Optional[BaseTextualInversionManager]=None, device: Optional[str]=None,
+                 system_prompt: Optional[str]=None, max_sequence_length=256):
+        self.system_prompt = (system_prompt if system_prompt is not None
+                              else DEFAULT_LUMINA2_SYSTEM_PROMPT)
+        self.compel = Compel(tokenizer=pipe.tokenizer, text_encoder=pipe.text_encoder,
+                             returned_embeddings_type=ReturnedEmbeddingsType.PENULTIMATE_HIDDEN_STATES_NON_NORMALIZED,
+                             textual_inversion_manager=textual_inversion_manager,
+                             truncate_long_prompts=True,
+                             padding_attention_mask_value=0,
+                             model_max_length=max_sequence_length,
+                             device=device,
+                             )
+
+    def disable_no_weights_bypass(self):
+        self.compel.disable_no_weights_bypass()
+
+    def __call__(self, prompt: Union[str, List[str]], negative_prompt: Union[None, str, List[str]] = None):
+        if type(prompt) is str:
+            prompt = [prompt]
+        if type(negative_prompt) is str:
+            negative_prompt = [negative_prompt]
+        prompt = [self.system_prompt + " <Prompt Start> " + p for p in prompt]
+        if negative_prompt is not None:
+            negative_prompt = [self.system_prompt + " <Prompt Start> " + p for p in negative_prompt]
+        input, negative_start_index = _make_compel_input_with_optional_negative(prompt, negative_prompt)
+        embeds, tokenizations = self.compel(input, return_tokenization=True)
+        provider = self.compel.conditioning_provider
+        attention_masks = _build_attention_masks(tokenizations, embeds.shape[1],
+                                                 provider.tokenizer.pad_token_id, provider.max_token_count)
+        embeds, negative_embeds = _split_embeds_and_pad_negative(embeds, negative_start_index)
+        attention_masks, negative_attention_masks = _split_embeds_and_pad_negative(attention_masks, negative_start_index)
+        tokenization_info = _build_tokenization_info(tokenizations, negative_start_index, prefix='main_')
+        return LabelledConditioning(embeds=embeds, attention_mask=attention_masks,
+                                    negative_embeds=negative_embeds,
+                                    negative_attention_mask=negative_attention_masks,
+                                    tokenization_info=tokenization_info)
+
+
+def _build_attention_masks(tokenizations, embeds_seq_len, pad_token_id, max_token_count):
+    masks = []
+    for tokens_batch in tokenizations:
+        mask = (tokens_batch != pad_token_id).long()
+        # pad with 0s in max_token_count-sized blocks to mirror
+        # Compel._pad_conditioning_tensors_to_same_length (only ever triggered
+        # for non-truncated prompts / .and() conjunctions)
+        while mask.shape[1] < embeds_seq_len:
+            mask = torch.cat([mask, torch.zeros(1, max_token_count, dtype=mask.dtype)], dim=1)
+        masks.append(mask)
+    return torch.cat(masks, dim=0)
 
 
 def _make_compel_input_with_optional_negative(positive_prompt: list[str], negative_prompt: Union[None, list[str]]):
