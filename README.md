@@ -250,7 +250,13 @@ This opt-in path only uses local files and does not pull remote model weights.
 
 ## Changelog
 
-### 2.5.0 - add Gemma2, CompelForSANA, CompelForLumina2
+### 2.5.0 - Gemma2 support (Lumina2 / SANA)
+
+* Added support for Gemma2 text encoder.
+* New `CompelForLumina2` and `CompelForSana` wrapper classes for `Lumina2Pipeline` and `SanaPipeline`.
+* New optional `model_max_length` argument on `Compel` / `EmbeddingsProvider` to override the effective maximum token count for truncation/chunking/padding (defaults to `tokenizer.model_max_length`).
+* Generic Gemma2 usage via `Compel(tokenizer=..., text_encoder=...)` works out of the box with no truncation.
+* See `compel-demo-lumina2.py` and `compel-demo-sana.py` for usage examples.
 
 ### 2.4.0 - Upgrade to Transformers 5, drop support for Python < 3.10 (thanks @Cstannahill for the PR, and thanks to everybody else for the patience)
 
