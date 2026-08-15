@@ -182,6 +182,7 @@ class CompelForSana:
                              padding_attention_mask_value=0,
                              model_max_length=max_sequence_length,
                              device=device,
+                             suppress_eos=True
                              )
 
     def disable_no_weights_bypass(self):

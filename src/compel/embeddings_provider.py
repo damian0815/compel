@@ -52,6 +52,7 @@ class EmbeddingsProvider:
                  device: Optional[str] = None,
                  split_long_text_mode: SplitLongTextMode = SplitLongTextMode.SENTENCES | SplitLongTextMode.COPY_FIRST_CLS_TOKEN,
                  model_max_length: Optional[int] = None,
+                 suppress_eos: bool = False
                  ):
         """
         `tokenizer`: converts strings to lists of int token ids
@@ -81,6 +82,7 @@ class EmbeddingsProvider:
         self.device = device if device else self.text_encoder.device
         self.split_long_text_mode = split_long_text_mode
         self.model_max_length_override = model_max_length
+        self.suppress_eos = suppress_eos
 
         # by default always use float32
         self.get_dtype_for_device = dtype_for_device_getter
@@ -113,7 +115,9 @@ class EmbeddingsProvider:
 
     @property
     def eos_sequence(self) -> List[int]:
-        return [self.tokenizer.eos_token_id] if self.tokenizer.eos_token_id is not None else []
+        if self.tokenizer.eos_token_id is None or self.suppress_eos:
+            return []
+        return [self.tokenizer.eos_token_id]
 
     @classmethod
     def apply_embedding_weights(cls, embeddings: torch.Tensor, per_embedding_weights: List[float],
@@ -453,6 +457,9 @@ class EmbeddingsProvider:
             chunk_token_weights = [1.0]*len(self.bos_sequence) + chunk_token_weights + [1.0]*len(self.eos_sequence)
             chunk_mask = [1] * len(chunk_token_ids)
 
+            print("chunk_token_ids: len", len(chunk_token_ids), "contents", chunk_token_ids)
+            print("chunk_mask: len", len(chunk_mask), "contents", chunk_mask)
+
             pad_length = self.max_token_count - len(chunk_token_ids)
             chunk_token_ids += [self.tokenizer.pad_token_id] * pad_length
             chunk_token_weights += [1.0] * pad_length
@@ -639,6 +646,7 @@ class EmbeddingsProviderMulti:
                  split_long_text_mode: SplitLongTextMode = SplitLongTextMode.SENTENCES | SplitLongTextMode.COPY_FIRST_CLS_TOKEN,
                  concat_along_embedding_dim: bool = True,
                  model_max_length: Optional[int] = None,
+                 suppress_eos: bool = False
                  ):
 
         if requires_pooled_mask is None:
@@ -646,7 +654,7 @@ class EmbeddingsProviderMulti:
         returned_embeddings_type = len(text_encoders) * [returned_embeddings_type] if not isinstance(returned_embeddings_type, (list,tuple)) else returned_embeddings_type
 
         self.embedding_providers = [
-            EmbeddingsProvider(tokenizer, text_encoder, textual_inversion_manager, dtype_for_device_getter, truncate, padding_attention_mask_value, downweight_mode, returned_embeddings_type, split_long_text_mode=split_long_text_mode, model_max_length=model_max_length)
+            EmbeddingsProvider(tokenizer, text_encoder, textual_inversion_manager, dtype_for_device_getter, truncate, padding_attention_mask_value, downweight_mode, returned_embeddings_type, split_long_text_mode=split_long_text_mode, model_max_length=model_max_length, suppress_eos=suppress_eos)
             for tokenizer, text_encoder, returned_embeddings_type in zip(tokenizers, text_encoders, returned_embeddings_type)
         ]
         self.requires_pooled_mask = requires_pooled_mask

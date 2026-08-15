@@ -29,6 +29,7 @@ class Compel:
                  split_long_text_mode: SplitLongTextMode = SplitLongTextMode.SENTENCES,
                  device: Optional[str] = None,
                  model_max_length: Optional[int] = None,
+                 suppress_eos: bool = False
                  ):
         """
         Initialize Compel.
@@ -56,6 +57,7 @@ class Compel:
         `model_max_length`: Overrides the maximum token count used for truncation/chunking/padding. Defaults to
             `tokenizer.model_max_length`. Useful for pipelines (e.g. Gemma2-backed) that mandate a fixed
             `max_sequence_length`.
+        `suppress_eos`: If True, do not append the EOS token to the end of the prompt (eg SANA)
         """
         def count_matching_flags(flags_to_test):
             return sum(1 for f in flags_to_test if f in split_long_text_mode)
@@ -81,6 +83,7 @@ class Compel:
                                                             requires_pooled_mask=requires_pooled,
                                                             split_long_text_mode=split_long_text_mode,
                                                             model_max_length=model_max_length,
+                                                            suppress_eos=suppress_eos
             )
         else:
             self.conditioning_provider = EmbeddingsProvider(tokenizer=tokenizer,
@@ -94,6 +97,7 @@ class Compel:
                                                             device=device,
                                                             split_long_text_mode=split_long_text_mode,
                                                             model_max_length=model_max_length,
+                                                            suppress_eos = suppress_eos
                                                             )
         self._device = device
         self.requires_pooled = requires_pooled
