@@ -308,7 +308,7 @@ class EmbeddingsProvider:
             # trim eos/bos
             if token_ids[0] == self.tokenizer.bos_token_id:
                 token_ids = token_ids[1:]
-            if token_ids[-1] == self.tokenizer.eos_token_id:
+            if len(token_ids) > 0 and token_ids[-1] == self.tokenizer.eos_token_id:
                 token_ids = token_ids[:-1]
             # pad for textual inversions with vector length >1
             if self.textual_inversion_manager is not None:
