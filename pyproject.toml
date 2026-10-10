@@ -19,7 +19,6 @@ classifiers = [
 ]
 dependencies = [
     "diffusers >= 0.11",
-    "notebook>=6.5.7",
     "pyparsing ~= 3.0",
     "torch",
     "transformers >= 5, < 6",
