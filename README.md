@@ -250,6 +250,8 @@ This opt-in path only uses local files and does not pull remote model weights.
 
 ## Changelog
 
+#### 2.5.1 - fix SANA eos suppression, blend, emptystring with gemma
+
 ### 2.5.0 - Gemma2 support (Lumina2 / SANA)
 
 * Added support for Gemma2 text encoder.

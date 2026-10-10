@@ -258,9 +258,10 @@ def _build_attention_masks(tokenizations, embeds_seq_len, pad_token_id, max_toke
         mask = (tokens_batch != pad_token_id).long()
         # pad with 0s in max_token_count-sized blocks to mirror
         # Compel._pad_conditioning_tensors_to_same_length (only ever triggered
-        # for non-truncated prompts / .and() conjunctions)
+        # for non-truncated prompts / .blend() / .and() conjunctions)
         while mask.shape[1] < embeds_seq_len:
-            mask = torch.cat([mask, torch.zeros(1, max_token_count, dtype=mask.dtype)], dim=1)
+            zeros = torch.zeros(1, max_token_count, device=mask.device, dtype=mask.dtype)
+            mask = torch.cat([mask, zeros], dim=1)
         masks.append(mask)
     return torch.cat(masks, dim=0)
 

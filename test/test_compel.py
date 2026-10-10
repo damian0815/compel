@@ -4,9 +4,9 @@ from typing import List, Optional
 
 import torch
 
-from compel import ReturnedEmbeddingsType, CompelForSD, CompelForSDXL, CompelForFlux
+from compel import ReturnedEmbeddingsType, CompelForSD, CompelForSDXL, CompelForFlux, CompelForSana
 from compel.conditioning_scheduler import StaticConditioningScheduler, ConditioningScheduler
-from prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
+from .prompting_test_utils import DummyTokenizer, DummyTransformer, KNOWN_WORDS, KNOWN_WORDS_TOKEN_IDS
 
 from compel.compel import Compel
 
@@ -586,6 +586,22 @@ class CompelTestCase(unittest.TestCase):
         self.assertEqual((1, 5), conditioning.tokenization_info['main_negative'][0].shape)
         self.assertEqual((1, 5), conditioning.tokenization_info['style_positive'][0].shape)
         self.assertEqual((1, 5), conditioning.tokenization_info['style_negative'][0].shape)
+
+
+    def test_convenience_blend(self):
+        max_length = 5
+        tokenizer = DummyTokenizer(model_max_length=max_length)
+        text_encoder = DummyTransformer(text_model_max_length=max_length)
+        pipeline = MagicMock()
+        pipeline.tokenizer = tokenizer
+        pipeline.text_encoder = text_encoder
+        compel = CompelForSana(pipeline, max_sequence_length=max_length)
+
+        pos_prompt = '("a b c", "b c d").blend()'
+        neg_prompt = ''
+        conditioning = compel([pos_prompt, neg_prompt])
+        assert conditioning
+
 
 
 if __name__ == '__main__':

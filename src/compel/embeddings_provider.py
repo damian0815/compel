@@ -457,8 +457,8 @@ class EmbeddingsProvider:
             chunk_token_weights = [1.0]*len(self.bos_sequence) + chunk_token_weights + [1.0]*len(self.eos_sequence)
             chunk_mask = [1] * len(chunk_token_ids)
 
-            print("chunk_token_ids: len", len(chunk_token_ids), "contents", chunk_token_ids)
-            print("chunk_mask: len", len(chunk_mask), "contents", chunk_mask)
+            #print("chunk_token_ids: len", len(chunk_token_ids), "contents", chunk_token_ids)
+            #print("chunk_mask: len", len(chunk_mask), "contents", chunk_mask)
 
             pad_length = self.max_token_count - len(chunk_token_ids)
             chunk_token_ids += [self.tokenizer.pad_token_id] * pad_length

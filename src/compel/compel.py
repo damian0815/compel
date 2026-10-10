@@ -236,7 +236,12 @@ class Compel:
         for i, p in enumerate(conjunction.prompts):
             (this_conditioning, this_tokens), this_options = self.build_conditioning_tensor_for_prompt_object(p)
             if type(this_tokens) is list:
-                tokenizations.extend(this_tokens)
+                if isinstance(p, Blend):
+                    # for a Blend, it only makes sense to take one set of tokenizations
+                    # so we take the first and ignore the rest
+                    tokenizations.append(this_tokens[0])
+                else:
+                    tokenizations.extend(this_tokens)
             else:
                 tokenizations.append(this_tokens)
             options.update(this_options)  # this is not a smart way to do this but 🤷‍
